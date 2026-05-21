@@ -1,0 +1,48 @@
+# Pilot run configuration.
+# Edit this file to change scope. The run scripts read this single source of truth.
+
+# Encoders to run. Comment out any line to skip that encoder.
+encoders:
+  - jm
+  - hm
+  - vtm
+  - ecm
+
+# Configurations to run. Each maps to a per-encoder cfg file.
+# Pilot uses AI + RA only; LDB / LDP available for full CTC.
+configs:
+  - AI       # All Intra
+  - RA       # Random Access
+  # - LDB    # Low-Delay B  (uncomment for full CTC)
+  # - LDP    # Low-Delay P  (uncomment for full CTC)
+
+# QPs to encode. Need ≥4 for BD-rate. CTC standard set is 22/27/32/37.
+qps: [22, 27, 32, 37]
+
+# Sequences to run. Each name maps to configs/sequences/<name>.yaml.
+sequences:
+  - BasketballDrill   # Class C, 832x480
+  - BlowingBubbles    # Class D, 416x240
+  # - Traffic         # Class A1, 2560x1600  (future expansion)
+  # - PeopleOnStreet  # Class A2, 2560x1600  (future expansion)
+  # - Cactus          # Class B, 1920x1080   (skipped in pilot — too expensive)
+
+# Frame budget per (encoder, config). Pilot encodes only 1-2 GOPs.
+# CTC IntraPeriod for these resolutions/fps is 32 frames (RA) or 1 GOP (AI=32).
+# Setting frames_to_encode = 64 = 2 GOPs covers AI (32) and RA (64) cleanly.
+frames_to_encode: 64
+
+# Concurrency for the task scheduler.
+# Mac Studio M4 Max 36GB: 4 is the sweet spot for VTM/ECM peak memory ~6GB each.
+# On bigger Linux nodes, raise this.
+parallel_jobs: 4
+
+# Per-task wall-clock timeout (seconds). 0 = no timeout.
+# ECM RA on 832x480 over 64 frames should finish well under 24h.
+job_timeout_sec: 86400
+
+# Whether to keep reconstructed YUV (very large). Recommended OFF.
+keep_recon: false
+
+# Output run directory naming pattern (passed to strftime).
+run_dir_pattern: "%Y-%m-%d_%H%M_pilot"

@@ -1,0 +1,14 @@
+# Sequence metadata for BasketballDrill (Class C)
+# Single source of truth used by run_pilot.py to generate per-encoder configs.
+name: BasketballDrill
+class: C
+width: 832
+height: 480
+fps: 50
+bit_depth: 8
+chroma_format: 420
+total_frames: 500
+level: "3.1"          # HEVC level; HM/VTM/ECM use this; JM uses its own (51 = 5.1)
+yuv_filename: BasketballDrill_832x480_50.yuv
+md5: ""               # fill once the YUV is downloaded
+source_url: "ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/"

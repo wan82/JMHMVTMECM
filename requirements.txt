@@ -1,0 +1,13 @@
+# Python dependencies for codec-comparison-pilot
+# Install with:
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+
+numpy>=1.26
+pandas>=2.2
+scipy>=1.12
+matplotlib>=3.8
+pyyaml>=6.0
+tqdm>=4.66
+bjontegaard>=1.3.0

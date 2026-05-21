@@ -1,0 +1,83 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Project-level compiled binaries (project root bin/)
+# Also catches tools/<encoder>/bin/ since pattern is unanchored.
+bin/
+
+# Build artifacts inside the encoder source trees under tools/.
+# We DO track:
+#   - tools/<encoder>/source/   (source code, including our CMakeLists.txt edits)
+#   - tools/<encoder>/cfg/      (official CTC configs + JM HM-like configs)
+#   - tools/<encoder>/cmake/    (CMake helper modules)
+#   - tools/<encoder>/CMakeLists.txt, Makefile, README, etc.
+# We DO NOT track these build-output directories:
+tools/*/build/
+tools/*/lib/
+tools/*/bin/
+
+# Defensive CMake / compiler junk (in case anything leaks out of build/)
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+cmake_install.cmake
+
+# Compiled object / archive / shared library / debug bundles
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.dSYM/
+*.exe
+
+# Xcode user-specific files (Xcode generator on macOS produces these)
+xcuserdata/
+*.xcuserdatad/
+project.xcworkspace/xcuserdata/
+
+# Encoded outputs and intermediate files (project-level)
+runs/
+sequences/*.yuv
+sequences/*.y4m
+*.bin
+*.264
+*.265
+*.266
+*.h266
+*.vvc
+
+# Reconstructed YUV (large)
+*_rec.yuv
+*_rec_*.yuv
+
+# JM (lencod) side-effect files written to CWD when run from the project root
+# (sanity check, manual JM invocations). These are JM-specific artifacts.
+data.txt
+log.dat
+stats.dat
+leakybucketparam.cfg
+leakybucketrate.cfg
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+
+# Log archives
+*.log.gz
+*.tar.gz
+
+# Allow MANIFEST and small reference files
+!sequences/MANIFEST.csv
+!sequences/README.md

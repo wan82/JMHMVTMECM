@@ -1,0 +1,15 @@
+# Sequence metadata for Traffic (Class A1)
+# Provided as a stub for future expansion. NOT used in pilot.
+# When you uncomment in pilot.yaml, also fill md5 after downloading.
+name: Traffic
+class: A1
+width: 2560
+height: 1600
+fps: 30
+bit_depth: 8
+chroma_format: 420
+total_frames: 150
+level: "5.0"
+yuv_filename: Traffic_2560x1600_30_crop.yuv
+md5: ""
+source_url: "ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/"

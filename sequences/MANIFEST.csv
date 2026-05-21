@@ -1,0 +1,5 @@
+name,width,height,fps,bit_depth,total_frames,md5,source_url
+BasketballDrill_832x480_50.yuv,832,480,50,8,500,TBD,ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/
+BlowingBubbles_416x240_50.yuv,416,240,50,8,500,TBD,ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/
+Traffic_2560x1600_30_crop.yuv,2560,1600,30,8,150,TBD,ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/
+PeopleOnStreet_2560x1600_30_crop.yuv,2560,1600,30,8,150,TBD,ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/

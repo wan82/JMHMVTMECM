@@ -1,0 +1,114 @@
+# HM (HEVC reference, HM-18.0) — ARM macOS / aarch64 compatibility patch
+#
+# Purpose: gate the x86 SSE/AVX code paths to x86/x86_64 only.
+# Two modifications:
+#   1. Top-level CMakeLists.txt — guard the global `-msse4.1` add_compile_options
+#      with NOT (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64").
+#   2. source/Lib/TLibCommon/CMakeLists.txt — wrap both the x86 source-file
+#      file(GLOB) calls and the per-file COMPILE_FLAGS settings in the same
+#      arm64 guard. This prevents both: x86-intrinsic source files being
+#      compiled on ARM (they'd fail), and the -msse4.1/-mavx2 flags being
+#      passed to clang on ARM.
+#
+# Status: NOT auto-applied (kept as documentation/backup).
+#   The modification has been committed directly to tools/HM-HM-18.0/.
+#   This patch is for review/re-application if the source tree is replaced.
+#
+# To re-apply against a pristine HM-18.0 source tree:
+#   cd tools/HM-HM-18.0
+#   git apply ../patches/hm_arm_macos.patch
+#
+# Verified against: HM-18.0 (from HM-HM-18.0.zip shipped 2025-09-30)
+#
+# Note: VTM-23.11 and ECM-18.0 already include equivalent arm64 guards
+#       upstream, so they don't need a patch.
+
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -92,7 +92,8 @@
+ bb_enable_warnings( msvc warnings-as-errors "/wd4996" )
+ 
+ # enable sse4.1 build for all source files for gcc and clang
+-if( UNIX OR MINGW )
++# (only on x86 — ARM64 (Apple Silicon, aarch64) doesn't accept -msse4.1)
++if( (UNIX OR MINGW) AND NOT (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64") )
+   add_compile_options( "-msse4.1" )
+ endif()
+ 
+--- a/source/Lib/TLibCommon/CMakeLists.txt
++++ b/source/Lib/TLibCommon/CMakeLists.txt
+@@ -12,23 +12,25 @@
+ # get include files
+ file( GLOB BASE_INC_FILES "*.h" )
+ 
+-# get x86 source files
+-file( GLOB X86_SRC_FILES "x86/*.cpp" )
++if (NOT (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64") )
++  # get x86 source files
++  file( GLOB X86_SRC_FILES "x86/*.cpp" )
+ 
+-# get x86 include files
+-file( GLOB X86_INC_FILES "x86/*.h" )
++  # get x86 include files
++  file( GLOB X86_INC_FILES "x86/*.h" )
+ 
+-# get avx source files
+-file( GLOB AVX_SRC_FILES "x86/avx/*.cpp" )
++  # get avx source files
++  file( GLOB AVX_SRC_FILES "x86/avx/*.cpp" )
+ 
+-# get avx2 source files
+-file( GLOB AVX2_SRC_FILES "x86/avx2/*.cpp" )
++  # get avx2 source files
++  file( GLOB AVX2_SRC_FILES "x86/avx2/*.cpp" )
+ 
+-# get sse4.2 source files
+-file( GLOB SSE42_SRC_FILES "x86/sse42/*.cpp" )
++  # get sse4.2 source files
++  file( GLOB SSE42_SRC_FILES "x86/sse42/*.cpp" )
+ 
+-# get sse4.1 source files
+-file( GLOB SSE41_SRC_FILES "x86/sse41/*.cpp" )
++  # get sse4.1 source files
++  file( GLOB SSE41_SRC_FILES "x86/sse41/*.cpp" )
++endif()
+ 
+ # get libmd5 source files
+ file( GLOB MD5_SRC_FILES "../libmd5/*.cpp" )
+@@ -66,20 +68,22 @@
+ target_include_directories( ${LIB_NAME} PUBLIC . .. ./x86 ../libmd5 )
+ target_link_libraries( ${LIB_NAME} Threads::Threads )
+ 
+-# set needed compile definitions
+-set_property( SOURCE ${SSE41_SRC_FILES} APPEND PROPERTY COMPILE_DEFINITIONS USE_SSE41 )
+-set_property( SOURCE ${SSE42_SRC_FILES} APPEND PROPERTY COMPILE_DEFINITIONS USE_SSE42 )
+-set_property( SOURCE ${AVX_SRC_FILES}   APPEND PROPERTY COMPILE_DEFINITIONS USE_AVX )
+-set_property( SOURCE ${AVX2_SRC_FILES}  APPEND PROPERTY COMPILE_DEFINITIONS USE_AVX2 )
+-# set needed compile flags
+-if( MSVC )
+-  set_property( SOURCE ${AVX_SRC_FILES}   APPEND PROPERTY COMPILE_FLAGS "/arch:AVX" )
+-  set_property( SOURCE ${AVX2_SRC_FILES}  APPEND PROPERTY COMPILE_FLAGS "/arch:AVX2" )
+-elseif( UNIX OR MINGW )
+-  set_property( SOURCE ${SSE41_SRC_FILES} APPEND PROPERTY COMPILE_FLAGS "-msse4.1" )
+-  set_property( SOURCE ${SSE42_SRC_FILES} APPEND PROPERTY COMPILE_FLAGS "-msse4.2" )
+-  set_property( SOURCE ${AVX_SRC_FILES}   APPEND PROPERTY COMPILE_FLAGS "-mavx" )
+-  set_property( SOURCE ${AVX2_SRC_FILES}  APPEND PROPERTY COMPILE_FLAGS "-mavx2" )
++if (NOT (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64") )
++  # set needed compile definitions
++  set_property( SOURCE ${SSE41_SRC_FILES} APPEND PROPERTY COMPILE_DEFINITIONS USE_SSE41 )
++  set_property( SOURCE ${SSE42_SRC_FILES} APPEND PROPERTY COMPILE_DEFINITIONS USE_SSE42 )
++  set_property( SOURCE ${AVX_SRC_FILES}   APPEND PROPERTY COMPILE_DEFINITIONS USE_AVX )
++  set_property( SOURCE ${AVX2_SRC_FILES}  APPEND PROPERTY COMPILE_DEFINITIONS USE_AVX2 )
++  # set needed compile flags
++  if( MSVC )
++    set_property( SOURCE ${AVX_SRC_FILES}   APPEND PROPERTY COMPILE_FLAGS "/arch:AVX" )
++    set_property( SOURCE ${AVX2_SRC_FILES}  APPEND PROPERTY COMPILE_FLAGS "/arch:AVX2" )
++  elseif( UNIX OR MINGW )
++    set_property( SOURCE ${SSE41_SRC_FILES} APPEND PROPERTY COMPILE_FLAGS "-msse4.1" )
++    set_property( SOURCE ${SSE42_SRC_FILES} APPEND PROPERTY COMPILE_FLAGS "-msse4.2" )
++    set_property( SOURCE ${AVX_SRC_FILES}   APPEND PROPERTY COMPILE_FLAGS "-mavx" )
++    set_property( SOURCE ${AVX2_SRC_FILES}  APPEND PROPERTY COMPILE_FLAGS "-mavx2" )
++  endif()
+ endif()
+ 
+ # example: place header files in different folders
