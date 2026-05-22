@@ -65,6 +65,10 @@ stats.dat
 leakybucketparam.cfg
 leakybucketrate.cfg
 
+# HM (TAppEncoder) side-effect: when --ReconFile is empty, HM still writes
+# its default 'rec.yuv' into CWD. Same risk for manual VTM/ECM invocations.
+rec.yuv
+
 # OS junk
 .DS_Store
 Thumbs.db

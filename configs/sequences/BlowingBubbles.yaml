@@ -8,7 +8,7 @@ fps: 50
 bit_depth: 8
 chroma_format: 420
 total_frames: 500
-level: "3.0"
+level: "3"            # HM/VTM/ECM accept "3" / "3.1" / etc; "3.0" is rejected as invalid
 yuv_filename: BlowingBubbles_416x240_50.yuv
 md5: ""               # fill once the YUV is downloaded
 source_url: "ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/"
