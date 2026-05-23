@@ -46,6 +46,9 @@ project.xcworkspace/xcuserdata/
 runs/
 sequences/*.yuv
 sequences/*.y4m
+# Subsampled AI YUVs produced by scripts/extract_ai_subsample.py
+# (covered by sequences/*.yuv above, but called out explicitly for clarity)
+sequences/*_AI_TSR*.yuv
 *.bin
 *.264
 *.265

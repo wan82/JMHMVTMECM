@@ -116,6 +116,12 @@ def make_run_dir(pilot_cfg: dict, run_id: str | None) -> Path:
     return run_dir
 
 
+# JVET VVC CTC AI subsample ratio. Must match TSR used by
+# scripts/extract_ai_subsample.py. AI is all-intra so adjacent frames give
+# near-identical RD numbers — sampling every 8th is the JVET convention.
+AI_TSR = 8
+
+
 # --- Per-encoder command builders ---
 def build_cmd_hm_vtm_ecm(enc: str, seq: dict, cfg_name: str, qp: int,
                          frames: int, intra_period: int, run_dir: Path,
@@ -149,12 +155,15 @@ def build_cmd_hm_vtm_ecm(enc: str, seq: dict, cfg_name: str, qp: int,
         f"--Level={seq.get('level', '5.1')}",
         "--ReconFile=",  # empty = no recon written
     ]
-    # VTM/ECM ship an AI cfg with TemporalSubsampleRatio=8 (the JVET CTC AI
-    # default — encode every 8th frame for "AI rep" testing). For our
-    # consecutive-frames pilot we always want 1:1. HM 18.0 doesn't expose this
-    # CLI option, so we only inject it for VTM/ECM.
-    if enc in ("vtm", "ecm"):
-        cmd.append("--TemporalSubsampleRatio=1")
+    # AI mode: follow JVET VVC CTC methodology — encode every AI_TSR-th frame
+    # within the FramesToBeEncoded window. HM 18.0, VTM 23, ECM 18 all accept
+    # this CLI override. With FramesToBeEncoded=64 and TSR=8, the encoder reads
+    # frames 0..63 of the YUV and emits 8 encoded pictures (POC 0..7
+    # corresponding to source frames 0, 8, 16, ..., 56). The reported bitrate
+    # is divided by source_fps/TSR (e.g. 6.25Hz for 50fps content) so kbps
+    # remain meaningful at the encoded-picture time base.
+    if cfg_name == "AI":
+        cmd.append(f"--TemporalSubsampleRatio={AI_TSR}")
     return cmd, bs_path, log_path
 
 
@@ -162,9 +171,28 @@ def build_cmd_jm(seq: dict, cfg_name: str, qp: int, frames: int,
                  intra_period: int, run_dir: Path, job_id: str) -> tuple[list[str], Path, Path]:
     binary = BIN_DIR / BIN_MAP["jm"]
     enc_cfg = CONFIGS_DIR / "jm" / CONFIG_MAP[cfg_name]["jm"]
-    yuv_path = SEQUENCES_DIR / seq["yuv_filename"]
     bs_path = run_dir / "bitstreams" / f"{job_id}.264"
     log_path = run_dir / "logs" / f"{job_id}.log"
+
+    # JM has no TemporalSubsampleRatio option, so for AI we feed it a
+    # pre-decimated YUV produced by scripts/extract_ai_subsample.py
+    # (containing only source frames 0, AI_TSR, 2*AI_TSR, ...). To keep the
+    # output kbps on the same time base as HM/VTM/ECM (which divide by
+    # source_fps/TSR), we lie to JM about FrameRate: tell it fps/TSR.
+    if cfg_name == "AI":
+        src_yuv = SEQUENCES_DIR / seq["yuv_filename"]
+        sub_yuv = src_yuv.with_name(src_yuv.stem + f"_AI_TSR{AI_TSR}.yuv")
+        if not sub_yuv.exists():
+            raise FileNotFoundError(
+                f"Missing subsampled AI YUV: {sub_yuv}. "
+                f"Run: python scripts/extract_ai_subsample.py")
+        yuv_path = sub_yuv
+        encoded_frames = frames // AI_TSR
+        framerate = seq["fps"] / AI_TSR  # may be fractional, JM accepts that
+    else:
+        yuv_path = SEQUENCES_DIR / seq["yuv_filename"]
+        encoded_frames = frames
+        framerate = seq["fps"]
 
     # JM IDRPeriod also needs to be set for RA; for AI both should be 1
     idr_period = 1 if cfg_name == "AI" else intra_period
@@ -178,8 +206,8 @@ def build_cmd_jm(seq: dict, cfg_name: str, qp: int, frames: int,
         f"SourceHeight={seq['height']}",
         f"OutputWidth={seq['width']}",
         f"OutputHeight={seq['height']}",
-        f"FrameRate={seq['fps']}",
-        f"FramesToBeEncoded={frames}",
+        f"FrameRate={framerate}",
+        f"FramesToBeEncoded={encoded_frames}",
         "FrameSkip=0",
         f"SourceBitDepthLuma={seq['bit_depth']}",
         f"SourceBitDepthChroma={seq['bit_depth']}",

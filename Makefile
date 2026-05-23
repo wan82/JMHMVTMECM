@@ -7,8 +7,8 @@ PYTHON       := $(PROJECT_ROOT)/.venv/bin/python
 PIP          := $(PROJECT_ROOT)/.venv/bin/pip
 
 .PHONY: help venv build build-jm build-hm build-vtm build-ecm \
-        sanity encode encode-dry parse bdrate report clean clean-runs \
-        verify-baseline
+        subsample-ai sanity encode encode-dry parse bdrate report \
+        clean clean-runs verify-baseline
 
 help:
 	@echo "Targets:"
@@ -16,6 +16,7 @@ help:
 	@echo "  make build            Build all four encoders (JM, HM, VTM, ECM)"
 	@echo "  make build-<encoder>  Build a single encoder"
 	@echo "  make sanity           Run a single tiny encode per encoder to verify build"
+	@echo "  make subsample-ai     Pre-extract every 8th frame for JM AI (CTC AI methodology)"
 	@echo "  make encode-dry       Print the full job matrix without executing"
 	@echo "  make encode           Run the full pilot encode matrix"
 	@echo "  make parse            Parse logs in latest run to results/raw_metrics.csv"
@@ -46,10 +47,13 @@ build-ecm:
 sanity:
 	$(PYTHON) scripts/build_sanity_check.py
 
-encode-dry:
+subsample-ai:
+	$(PYTHON) scripts/extract_ai_subsample.py
+
+encode-dry: subsample-ai
 	$(PYTHON) scripts/run_pilot.py --dry-run
 
-encode:
+encode: subsample-ai
 	$(PYTHON) scripts/run_pilot.py
 
 parse:
