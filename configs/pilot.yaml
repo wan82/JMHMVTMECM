@@ -35,7 +35,7 @@ frames_to_encode: 64
 # Concurrency for the task scheduler.
 # Mac Studio M4 Max 36GB: 4 is the sweet spot for VTM/ECM peak memory ~6GB each.
 # On bigger Linux nodes, raise this.
-parallel_jobs: 4
+parallel_jobs: 5
 
 # Per-task wall-clock timeout (seconds). 0 = no timeout.
 # ECM RA on 832x480 over 64 frames should finish well under 24h.

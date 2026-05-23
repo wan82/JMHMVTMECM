@@ -1,0 +1,17 @@
+sequence,config,encoder,avg_enc_time_sec,ratio_vs_jm
+BasketballDrill,AI,jm,7.454,1.000
+BasketballDrill,AI,hm,5.560,0.746
+BasketballDrill,AI,vtm,194.845,26.141
+BasketballDrill,AI,ecm,2021.823,271.249
+BasketballDrill,RA,jm,153.786,1.000
+BasketballDrill,RA,hm,117.852,0.766
+BasketballDrill,RA,vtm,1457.303,9.476
+BasketballDrill,RA,ecm,15192.016,98.786
+BlowingBubbles,AI,jm,2.183,1.000
+BlowingBubbles,AI,hm,1.615,0.739
+BlowingBubbles,AI,vtm,78.346,35.881
+BlowingBubbles,AI,ecm,801.092,366.884
+BlowingBubbles,RA,jm,44.632,1.000
+BlowingBubbles,RA,hm,30.142,0.675
+BlowingBubbles,RA,vtm,503.310,11.277
+BlowingBubbles,RA,ecm,5578.106,124.981

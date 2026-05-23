@@ -80,6 +80,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+*.bak
+*.orig
+*~
 
 # Log archives
 *.log.gz
