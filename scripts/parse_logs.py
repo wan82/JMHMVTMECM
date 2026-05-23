@@ -20,37 +20,52 @@ RESULTS_DIR.mkdir(exist_ok=True)
 
 
 # --- HM / VTM / ECM log patterns ---
-# Example:
+# Two formats observed across encoder generations:
+#
+# HM 18 (single SUMMARY block):
 #   SUMMARY --------------------------------------------------------
 #         Total Frames |   Bitrate     Y-PSNR    U-PSNR    V-PSNR  ...
 #                  64 a   1583.4500   35.7689   38.6314   38.9952  ...
+#
+# VTM 23 / ECM 18 (per-layer block, no "SUMMARY ---" preamble):
+#   LayerId  0
+#    Total Frames |  Bitrate      Y-PSNR   U-PSNR   V-PSNR   YUV-PSNR
+#   64           a  20580.7438    41.7798  43.8483  44.4565  42.4336
+#
+# We match the shared "Total Frames | Bitrate ... Y-PSNR ..." header line and
+# pull the numbers from the data row that immediately follows. This handles
+# both dialects with a single regex.
 RE_HM_SUMMARY = re.compile(
-    r"SUMMARY\s*-+\s*\n"
-    r".*?Total Frames.*?Bitrate.*?Y-PSNR.*?U-PSNR.*?V-PSNR.*?\n"
-    r"\s*(\d+)\s*\S+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",
-    re.DOTALL,
+    r"Total Frames\s*\|\s*Bitrate\s+Y-PSNR\s+U-PSNR\s+V-PSNR[^\n]*\n"
+    r"\s*(\d+)\s+\S+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)"
 )
 RE_HM_TIME = re.compile(r"Total Time:\s*([\d.]+)\s*sec\.", re.IGNORECASE)
 
 
 # --- JM log patterns ---
-# JM verbose-1 prints something like:
-#   Total bits         : ...
-#   ------------------------------ Average data all frames  -------------
-#    Total encoding time for the seq. ...
-#    PSNR Y(dB)         |  35.43
-#    PSNR U(dB)         |  38.20
-#    PSNR V(dB)         |  38.55
-#    Bit rate (kbit/s)  | 1581.45
-RE_JM_PSNR_Y = re.compile(r"PSNR\s*Y\s*\(dB\)\s*[:|]\s*([\d.]+)")
-RE_JM_PSNR_U = re.compile(r"PSNR\s*U\s*\(dB\)\s*[:|]\s*([\d.]+)")
-RE_JM_PSNR_V = re.compile(r"PSNR\s*V\s*\(dB\)\s*[:|]\s*([\d.]+)")
+# JM 19 prints, in the "Average data all frames" trailer:
+#    Y { PSNR (dB), cSNR (dB), MSE }   : {  41.514,  41.514,   4.58828 }
+#    U { PSNR (dB), cSNR (dB), MSE }   : {  43.824,  43.823,   2.69608 }
+#    V { PSNR (dB), cSNR (dB), MSE }   : {  44.484,  44.482,   2.31678 }
+#    Total encoding time for the seq.  :  78.916 sec (0.81 fps)
+#    Bit rate (kbit/s)  @ 50.00 Hz     : 26802.38
+#    Total Frames:  64
+# Note word order: "Y { PSNR (dB)" — channel letter comes BEFORE the word PSNR
+# (unlike HM/VTM/ECM). First number inside the braces is the PSNR.
+RE_JM_PSNR_Y = re.compile(
+    r"^\s*Y\s*\{\s*PSNR\s*\(dB\)[^:]*:\s*\{\s*([\d.]+)", re.MULTILINE)
+RE_JM_PSNR_U = re.compile(
+    r"^\s*U\s*\{\s*PSNR\s*\(dB\)[^:]*:\s*\{\s*([\d.]+)", re.MULTILINE)
+RE_JM_PSNR_V = re.compile(
+    r"^\s*V\s*\{\s*PSNR\s*\(dB\)[^:]*:\s*\{\s*([\d.]+)", re.MULTILINE)
 RE_JM_BITRATE = re.compile(
     r"Bit\s*rate.*kbit.*?[:|]\s*([\d.]+)", re.IGNORECASE)
 RE_JM_TIME = re.compile(
     r"Total encoding time.*?[:|]\s*([\d.:]+)", re.IGNORECASE)
+# JM prints "Total Frames:  64" (note capital F, colon, no "coded"). The older
+# "Total frames coded" wording does not appear in JM 19 output.
 RE_JM_FRAMES = re.compile(
-    r"Total frames\s*coded.*?[:|]\s*(\d+)", re.IGNORECASE)
+    r"Total\s*Frames\s*[:|]\s*(\d+)", re.IGNORECASE)
 
 
 def parse_jm_time(s: str) -> float:

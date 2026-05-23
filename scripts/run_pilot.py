@@ -149,6 +149,12 @@ def build_cmd_hm_vtm_ecm(enc: str, seq: dict, cfg_name: str, qp: int,
         f"--Level={seq.get('level', '5.1')}",
         "--ReconFile=",  # empty = no recon written
     ]
+    # VTM/ECM ship an AI cfg with TemporalSubsampleRatio=8 (the JVET CTC AI
+    # default — encode every 8th frame for "AI rep" testing). For our
+    # consecutive-frames pilot we always want 1:1. HM 18.0 doesn't expose this
+    # CLI option, so we only inject it for VTM/ECM.
+    if enc in ("vtm", "ecm"):
+        cmd.append("--TemporalSubsampleRatio=1")
     return cmd, bs_path, log_path
 
 
