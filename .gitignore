@@ -91,3 +91,6 @@ Thumbs.db
 # Allow MANIFEST and small reference files
 !sequences/MANIFEST.csv
 !sequences/README.md
+
+# Chinese MD and PDF files (Use for myself learning, not source)
+*zh.*
