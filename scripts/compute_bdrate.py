@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Compute BD-rate across encoders from results/raw_metrics.csv.
 
-For each (sequence, config) the BD-rate is computed for these pairs:
-  - HM vs JM           (HEVC vs AVC)
-  - VTM vs HM          (VVC vs HEVC)
-  - ECM vs VTM         (post-VVC vs VVC)
-  - ECM vs JM          (cumulative)
+Two complementary views are emitted, both in results/bdrate_table.csv:
+
+Per-generation (single-step) gains:
+  - HM vs JM           (HEVC over AVC)
+  - VTM vs HM          (VVC over HEVC)
+  - ECM vs VTM         (post-VVC over VVC)
+
+Cumulative-vs-AVC gains (used by build_report.py's primary bar chart, since
+it makes the multi-generation narrative directly readable):
+  - HM vs JM           (= same as above, listed once)
+  - VTM vs JM          (cumulative two-generation)
+  - ECM vs JM          (cumulative four-generation)
 
 Output: results/bdrate_table.csv
 """
@@ -22,9 +29,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = PROJECT_ROOT / "results"
 
 PAIRS = [
-    ("hm", "jm",   "HM-vs-JM"),
+    # Per-generation single-step gains
+    ("hm",  "jm",  "HM-vs-JM"),
     ("vtm", "hm",  "VTM-vs-HM"),
     ("ecm", "vtm", "ECM-vs-VTM"),
+    # Cumulative-vs-JM gains (HM-vs-JM is same as above; VTM-vs-JM and
+    # ECM-vs-JM are the new cumulative comparisons)
+    ("vtm", "jm",  "VTM-vs-JM"),
     ("ecm", "jm",  "ECM-vs-JM"),
 ]
 
