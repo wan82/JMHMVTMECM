@@ -1,45 +1,50 @@
 # HANDOFF — codec-comparison-pilot
 
-> 写给在我（xiangyu.wan）毕业后接手这个项目并把它扩展到完整 JVET CTC 的同学/师弟师妹。
+> Written for the student who will take over this project after I
+> (xiangyu.wan) graduate, and extend it to the full JVET CTC.
 
 ---
 
-## 1. 你拿到了什么
+## 1. What you're inheriting
 
-一个端到端可运行的 pilot 项目，覆盖：
+An end-to-end runnable pilot project covering:
 
-- 4 个参考软件（JM-19.1 / HM-18.0 / VTM-23.11 / ECM-18.0）
-- 2 个测试序列（BasketballDrill Class C + BlowingBubbles Class D）
-- 2 种配置（AI + RA）
-- 4 个 QP（22, 27, 32, 37）
+- 4 reference encoders (JM-19.1 / HM-18.0 / VTM-23.11 / ECM-18.0)
+- 2 test sequences (BasketballDrill Class C + BlowingBubbles Class D)
+- 2 configurations (AI + RA)
+- 4 QPs (22, 27, 32, 37)
 
-并且已经把脚手架搭好了：
+Plus the scaffolding:
 
-- 跨平台编译脚本（macOS + Linux 都支持）
-- Python venv（不依赖 conda）
-- 任务调度（可恢复、可并发）
-- 日志解析、BD-rate 计算、报告生成
-- Pilot baseline 验证脚本
+- Cross-platform build script (macOS + Linux)
+- Python venv (no conda dependency)
+- Task scheduler (resumable, concurrent)
+- Log parsing, BD-rate computation, report generation
+- Pilot baseline verification script
 
-Pilot 在 Mac Studio M4 Max 上已经跑完，基线 commit 在 git 历史里
-（搜 `Pilot baseline`）。当时拿到的 headline 数字（RA, Y-PSNR）：
+The pilot has already been run on a Mac Studio M4 Max and the baseline
+is committed in the git history (search for `Pilot baseline`). Headline
+numbers from that run (RA, Y-PSNR):
 
-| 对比 | BasketballDrill | BlowingBubbles |
+| Comparison | BasketballDrill | BlowingBubbles |
 |---|---|---|
 | HM vs JM | −46.4% | −32.4% |
 | VTM vs HM | −35.2% | −24.8% |
 | ECM vs VTM | −27.8% | −22.1% |
-| **ECM vs JM (累积四代)** | **−74.7%** | **−59.9%** |
+| **ECM vs JM (cumulative, 4 generations)** | **−74.7%** | **−59.9%** |
 
-时间 ratio（相对 JM, RA）：HM 0.77×（更快，见 §7.6），VTM 9.5×，ECM 99×。
+Time ratios (relative to JM, RA): HM 0.77× (faster, see §7.7), VTM 9.5×,
+ECM 99×.
 
-如果你的复现数字偏离这些超过 1%，先排查 §6 的 pitfalls，再考虑环境差异。
+If your reproduction numbers deviate from these by more than ~1%, investigate
+the pitfalls in §6 first, then consider environment differences.
 
 ---
 
-## 2. 第一件事：复现 pilot
+## 2. First thing: reproduce the pilot
 
-**不要直接扩展到完整 CTC**。先确认你的环境能复现 pilot：
+**Do not jump straight to full CTC.** First confirm that your environment
+can reproduce the pilot:
 
 ```bash
 cd codec-comparison-pilot
@@ -50,25 +55,25 @@ source .venv/bin/activate
 export TOOLS_DIR=/path/to/encoder/sources
 
 make build
-make sanity                     # 几分钟，验证编译
+make sanity                     # a few minutes, verifies the build
 # Drop YUVs into sequences/ (see sequences/README.md)
-make encode                     # pilot: 4-8 小时 (M4 Max);  full CTC: 1–2 周
-                                # 内部会先调 make subsample-ai 生成 AI 8 帧 YUV
+make encode                     # pilot: 4-8 h on M4 Max; full CTC: 1–2 weeks
+                                # Internally invokes `make subsample-ai` first
 make parse bdrate report
-make verify-baseline            # 关键：必须 PASS
+make verify-baseline            # critical: must PASS
 ```
 
-如果 `verify-baseline` 没过，**不要**继续扩展，先排查：
+If `verify-baseline` fails, **don't** extend the scope. Investigate:
 
-- 编码器版本是否对齐？（见 §3）
-- 序列文件 MD5 是否对齐？
-- 配置文件是否被修改过？
+- Are the encoder versions aligned? (see §3)
+- Do the sequence-file MD5s match?
+- Have the config files been modified?
 
-误差容忍：`|ΔY-PSNR| < 0.05 dB` 且 `|Δbitrate|/baseline < 1%`。
+Tolerance: `|ΔY-PSNR| < 0.05 dB` and `|Δbitrate|/baseline < 1%`.
 
 ---
 
-## 3. 编码器版本——绝对不要改
+## 3. Encoder versions — absolutely do not change
 
 | Encoder | Pinned Tag |
 |---|---|
@@ -77,24 +82,25 @@ make verify-baseline            # 关键：必须 PASS
 | VTM | VTM-23.11 |
 | ECM | ECM-18.0 |
 
-**任何版本变化都使既有 baseline 失效**。如果你必须升级（比如 ECM 出了新 release），
-按以下流程做：
+**Any version change invalidates the existing baseline.** If you really have
+to upgrade (e.g. a new ECM release):
 
-1. 在 README.md 和这里的表格中更新 tag
-2. 重新跑 pilot scope（make encode）
-3. 把新的 raw_metrics.csv 拷贝为新的 baseline（`make verify-baseline` 在没有 baseline 时
-   会自动 stamp 当前结果为基线）
-4. **明确告知导师**版本变化，记录在 git commit message 里
+1. Update the tags in README.md and in the table above.
+2. Re-run the pilot scope (`make encode`).
+3. Promote the new `raw_metrics.csv` to be the new baseline
+   (`make verify-baseline` will auto-stamp when no baseline exists).
+4. **Explicitly notify the advisor** of the version change and record it
+   in the git commit message.
 
 ---
 
-## 4. 扩展到完整 CTC
+## 4. Extending to full CTC
 
 ### 4.1 Class A1 / A2 (4K)
 
-需要做的事：
+To do:
 
-1. 在 `configs/pilot.yaml` 中取消注释 `Traffic` 和 `PeopleOnStreet`：
+1. Uncomment `Traffic` and `PeopleOnStreet` in `configs/pilot.yaml`:
 
    ```yaml
    sequences:
@@ -104,18 +110,22 @@ make verify-baseline            # 关键：必须 PASS
      - PeopleOnStreet
    ```
 
-2. 下载对应 YUV，放到 `sequences/`，更新 MANIFEST 中的 MD5。
+2. Download the corresponding YUVs into `sequences/` and update the
+   MANIFEST MD5s.
 
-3. 调整 `frames_to_encode`。Pilot 用了 64 帧；完整 CTC 应当跑完整序列（150 帧
-   对 Class A）。`configs/sequences/Traffic.yaml` 里的 `total_frames` 字段是单一来源。
+3. Adjust `frames_to_encode`. The pilot uses 64 frames; full CTC should
+   use the full sequence length (150 frames for Class A). The
+   `total_frames` field in `configs/sequences/Traffic.yaml` is the single
+   source of truth.
 
-4. **内存检查**：Mac Studio 36GB **跑不动 4K ECM RA 并行**。Class A 部分**必须**
-   切到 Linux 集群（见 §5）。或者把 `parallel_jobs` 降到 1，串行跑（但 ECM 4K
-   RA 一个 QP 可能要几天）。
+4. **Memory check**: a 36 GB Mac Studio **cannot run 4K ECM RA in parallel**.
+   The Class A portion **must** be moved to a Linux cluster (see §5).
+   Alternatively, drop `parallel_jobs` to 1 and run serially (but a single
+   ECM 4K RA QP may then take days).
 
-### 4.2 LDB / LDP 配置
+### 4.2 LDB / LDP configurations
 
-取消注释 `configs/pilot.yaml` 中的 LDB / LDP：
+Uncomment LDB / LDP in `configs/pilot.yaml`:
 
 ```yaml
 configs:
@@ -125,100 +135,120 @@ configs:
   - LDP
 ```
 
-`run_pilot.py` 内的 `CONFIG_MAP` 已经把 LDB/LDP 映射到了每个编码器的对应配置文件，
-不需要改代码。
+The `CONFIG_MAP` in `run_pilot.py` already maps LDB/LDP to each encoder's
+corresponding config file — no code changes needed.
 
-### 4.3 完整序列长度
+### 4.3 Full sequence length
 
-把 `configs/pilot.yaml` 的 `frames_to_encode` 改成一个明显大于任何序列长度的值
-（例如 100000），然后 `run_pilot.py` 会自动用 sequence YAML 中的 `total_frames`
-做上限。**当前实现没做这个 clamp**，需要小改。Pilot 不需要这个。具体修改：
+Set `frames_to_encode` in `configs/pilot.yaml` to a value clearly larger
+than any sequence length (e.g. 100000), and `run_pilot.py` should clamp
+to the `total_frames` from each sequence YAML. **The current implementation
+does not yet clamp**; a small change is needed. Specifically:
 
-`scripts/run_pilot.py` 里 `build_command()` 调用前，加一行：
+In `scripts/run_pilot.py`, just before the `build_command()` call, replace:
+
+```python
+frames = int(pilot_cfg["frames_to_encode"])
+```
+
+with:
 
 ```python
 frames = min(int(pilot_cfg["frames_to_encode"]), seq["total_frames"])
 ```
 
-替换原来的 `frames = int(pilot_cfg["frames_to_encode"])`。
+The pilot didn't need this.
 
-### 4.4 其他 Class（B / E / F）
+### 4.4 Other Classes (B / E / F)
 
-- **Class B (1080p)**：BQTerrace、Cactus、Kimono、ParkScene、BasketballDrive、Tango2、
-  FoodMarket4、MarketPlace、RitualDance、CatRobot1 等。每个加一份
-  `configs/sequences/<Name>.yaml`。
-- **Class E (720p)**：FourPeople、Johnny、KristenAndSara。
-- **Class F (屏幕内容)**：BasketballDrillText、ChinaSpeed、SlideEditing、SlideShow。
-  注意 Class F 通常需要 screen content coding 工具，配置稍有不同（HM/VTM/ECM 各有
-  对应的 `_scc.cfg` 变体，pilot 没复制，需要手工 cp 过来并加到 `CONFIG_MAP`）。
+- **Class B (1080p)**: BQTerrace, Cactus, Kimono, ParkScene, BasketballDrive,
+  Tango2, FoodMarket4, MarketPlace, RitualDance, CatRobot1, etc. Add a
+  `configs/sequences/<Name>.yaml` for each.
+- **Class E (720p)**: FourPeople, Johnny, KristenAndSara.
+- **Class F (screen content)**: BasketballDrillText, ChinaSpeed, SlideEditing,
+  SlideShow. Note that Class F typically requires screen-content-coding
+  tools — configurations differ slightly (HM/VTM/ECM each have `_scc.cfg`
+  variants which the pilot did not copy; you'll need to copy them manually
+  and add entries to `CONFIG_MAP`).
 
-### 4.5 AI 模式的子采样（JVET CTC TSR=8）
+### 4.5 AI subsampling (JVET CTC TSR=8)
 
-Pilot 已经按 JVET VVC CTC 的官方做法实现了 AI 子采样：每 8 帧取 1 帧
-（`TemporalSubsampleRatio=8`）。原因是 AI 完全 intra，相邻 intra 帧 R-D 数据接近重复——
-JVET 自己也只采样测试。**全 CTC 扩展时此设定无需改动**。
+The pilot already implements the JVET VVC CTC default for AI: encode every
+8th frame (`TemporalSubsampleRatio=8`). Rationale: AI is all-intra, and
+adjacent intra frames give near-identical R-D data — JVET itself only
+samples for testing. **No change needed for the full CTC extension.**
 
-实现细节（万一你要扩展或排查）：
+Implementation details (in case you need to extend or debug):
 
-- VTM/ECM 的 `encoder_intra_*.cfg` **默认就有** `TemporalSubsampleRatio=8`
-- HM 18.0 的 AI cfg 默认是 1，pilot 在 `run_pilot.py` 里强制传 `--TemporalSubsampleRatio=8`
-- JM 没有这个参数，pilot 通过 `scripts/extract_ai_subsample.py` 预先把每 8 帧抽出 1 帧
-  写到 `sequences/<Name>_AI_TSR8.yuv`，JM 再读这个文件
-- 为了让 bitrate kbps 单位一致（HM/VTM/ECM 内部按 fps/8 算，比如 50fps → 6.25Hz），
-  JM 被告知 `FrameRate=fps/8`
-- `make encode` 会自动调 `make subsample-ai`，幂等，不会重复生成
+- VTM/ECM's `encoder_intra_*.cfg` **already have** `TemporalSubsampleRatio=8`.
+- HM 18.0's AI cfg defaults to 1, so `run_pilot.py` explicitly passes
+  `--TemporalSubsampleRatio=8` on the CLI.
+- JM has no such parameter, so `scripts/extract_ai_subsample.py`
+  pre-decimates the YUV (writing 1 out of every 8 frames into
+  `sequences/<Name>_AI_TSR8.yuv`), which JM reads instead of the source.
+- To keep bitrate kbps units consistent (HM/VTM/ECM divide by
+  `source_fps/TSR` internally — e.g. 50fps → 6.25Hz), JM is told
+  `FrameRate = fps/TSR`.
+- `make encode` automatically invokes `make subsample-ai` (idempotent —
+  won't regenerate if files exist).
 
-如果你（按导师建议）想**只跑 RA、不要 AI**，把 `configs/pilot.yaml` 里 `configs:` 改成：
+If you (per the advisor's suggestion) want to **drop AI entirely**, change
+`configs/pilot.yaml` to:
 
 ```yaml
 configs:
   - RA
 ```
 
-即可。所有 AI 相关逻辑会被自动跳过。
+All AI-related logic will be skipped automatically.
 
-### 4.6 QP 范围（重要！pilot 不够宽）
+### 4.6 QP range (important! pilot's range is too narrow)
 
-Pilot 用了 `qps: [22, 27, 32, 37]`，跑出来的 BD-rate 报告里有 9 条
-`Insufficient curve overlap` warning（重叠度 47-73%，低于推荐 75%）。
+The pilot uses `qps: [22, 27, 32, 37]`. The resulting BD-rate report had
+9 `Insufficient curve overlap` warnings (overlap 47–73%, below the
+recommended 75%).
 
-跨代编码器（尤其 JM vs ECM）在同 QP 下 bitrate 差太大，4 个点拟合不够稳。
-**完整 CTC 强烈建议** 扩到 6 个 QP 点：
+For cross-generation comparisons (especially JM vs ECM), the bitrate
+range at the same QP differs so much that a 4-point fit is unstable.
+**For full CTC, strongly recommend** expanding to 6 QPs:
 
 ```yaml
 qps: [17, 22, 27, 32, 37, 42]
 ```
 
-QP17 给 JM/HM 一个低码率端的锚点；QP42 给 ECM 一个高码率端的锚点。这样 BD-rate 数字
-跟 JVET 公布值会贴得很近（pilot 的 ECM-vs-VTM Y 跑出 −22~−28%，偏高，主要就是
-overlap 不够；JVET 公布在 −10% 量级）。
+QP=17 gives JM/HM a low-bitrate anchor; QP=42 gives ECM a high-bitrate
+anchor. BD-rate numbers should then track JVET-published values much more
+closely (the pilot's ECM-vs-VTM Y came out at −22~−28%, on the high side,
+mainly because of insufficient overlap; JVET's published value is around
+−10%).
 
 ---
 
-## 5. 迁移到 Linux 集群
+## 5. Migrating to a Linux cluster
 
-`scripts/build_all.sh` 在 Linux 上原样可用（自动检测 `Linux` 平台、用 `nproc`）。
+`scripts/build_all.sh` works as-is on Linux (auto-detects platform, uses
+`nproc`).
 
-`scripts/run_pilot.py` 用的是 `concurrent.futures.ProcessPoolExecutor`，单机多进程。
-集群上有两种走法：
+`scripts/run_pilot.py` uses `concurrent.futures.ProcessPoolExecutor` —
+single-node multi-process. On a cluster, two paths:
 
-### 5.1 单大节点 + 提高 parallel_jobs
+### 5.1 One big node + raise `parallel_jobs`
 
-如果集群给你一个 64+ 核的大节点，直接：
+If the cluster gives you a 64+ core node, just:
 
 ```yaml
 # configs/pilot.yaml
 parallel_jobs: 32
 ```
 
-够大、够省事。
+Big and easy.
 
 ### 5.2 SLURM job array
 
-每个 (encoder, sequence, config, qp) 提交一个独立 SLURM job：
+Submit one independent SLURM job per `(encoder, sequence, config, qp)`:
 
 ```bash
-# 提交骨架（需要自己写一个简单的 wrapper）
+# Skeleton (write your own wrapper)
 python scripts/run_pilot.py --dry-run | \
   awk '/^# / && !/jobs/' | \
   while read -r line; do
@@ -228,135 +258,170 @@ python scripts/run_pilot.py --dry-run | \
   done
 ```
 
-更系统的做法是写一个 `scripts/run_cluster.py`，复用 `run_pilot.py` 里的 `expand_matrix`
-和命令构建逻辑，把任务转换成 SLURM `--array=0-N` 提交。**这部分 pilot 没实现**。
+A more systematic approach would be to write `scripts/run_cluster.py`,
+reusing `run_pilot.py`'s `expand_matrix` and command-construction logic,
+and translating to SLURM `--array=0-N` submissions. **The pilot did not
+implement this.**
 
-ECM RA 4K 单任务可能 ≥ 24 小时，记得 `--time` 给充分（72:00:00 比较安全）。
+A single 4K ECM RA task may run ≥ 24 hours; set `--time` generously
+(72:00:00 is safe).
 
 ---
 
-## 6. 已知 Pitfalls
+## 6. Known pitfalls
 
-### 6.1 JM 配置不能用 max performance
+### 6.1 Don't use JM's `max_performance` cfg
 
-`tools/JM-JM-19.1/cfg/encoder_max_performance.cfg` 是 JM 关掉 RDOQ、多 pass 等
-高质量工具的版本——**不能用它做对比**。本项目用的是 `cfg/HM-like/encoder_JM_*_HE.cfg`。
-见 `docs/JM_CTC_alignment.md`。
+`tools/JM-JM-19.1/cfg/encoder_max_performance.cfg` is JM's
+speed-optimised version with RDOQ and multi-pass disabled — **don't use
+it for comparison**. The project uses `cfg/HM-like/encoder_JM_*_HE.cfg`.
+See `docs/JM_CTC_alignment.md`.
 
-### 6.2 ECM 在 ARM macOS 上编译失败
+### 6.2 ECM build failure on ARM macOS
 
-如果碰到 `error: use of undeclared identifier '_mm_xxx'` 类似的 x86 intrinsic 报错：
+If you hit errors like `error: use of undeclared identifier '_mm_xxx'`
+(x86 intrinsics):
 
-1. 看 ECM 那次提交是不是临时引入了 x86-only 代码
-2. 把对应文件加 `#ifdef __x86_64__` 守卫，写成 patch 放进 `tools/patches/ecm_arm_macos.patch`
-3. build_all.sh 会在编译前自动 `git apply` 此 patch
+1. Check whether that ECM commit temporarily introduced x86-only code.
+2. Add `#ifdef __x86_64__` guards around the offending file, save as
+   a patch into `tools/patches/ecm_arm_macos.patch`.
+3. `build_all.sh` will `git apply` it automatically before configuring.
 
-### 6.3 编码时间在 M4 Max 上不能直接外推到 Linux 服务器
+### 6.3 M4 Max wall-clock times don't extrapolate to Linux servers
 
-报告时**只用 time ratio（相对 JM 或相对 HM）**，不要用绝对秒数。绝对数字与机器强相关。
+When reporting, **use only time ratios** (relative to JM or HM), never
+absolute seconds. Absolute numbers are tightly coupled to the machine.
 
-### 6.4 路径里有空格
+### 6.4 Paths containing spaces
 
-把项目放到不带空格的路径下。JM 的 `-p InputFile=...` 在 shell 转义上对空格非常脆弱。
+Place the project under a path without spaces. JM's `-p InputFile=…` is
+very fragile around shell-escape of spaces.
 
-### 6.5 BD-rate 实现差异
+### 6.5 BD-rate implementation differences
 
-`scripts/compute_bdrate.py` 用的是 FAU-LMS 的 `bjontegaard` PyPI 包（注意是
-`bjontegaard` 不是 `bjontegaard_metric`——后者已废弃）。如果未来想换实现做
-sanity check，用同一份 raw_metrics.csv 算出来应该相差 < 0.5%。
+`scripts/compute_bdrate.py` uses the FAU-LMS `bjontegaard` package on PyPI
+(note: `bjontegaard`, not the deprecated `bjontegaard_metric`). If you
+ever swap in another implementation as a sanity check, results computed
+from the same `raw_metrics.csv` should differ by < 0.5%.
 
-### 6.6 HM/VTM/ECM 的 `--Level=` 只接受标准字符串
+### 6.6 HM/VTM/ECM `--Level=` only accepts standard strings
 
-不接受 `"3.0"` / `"5.0"` 这种带尾零的写法，会报错：
+They do not accept trailing-zero formats like `"3.0"` or `"5.0"` — these
+fail with:
 
 ```
 Error parsing option "Level" with argument "3.0".
 ```
 
-合法字符串：`"1", "2", "2.1", "3", "3.1", "4", "4.1", "5", "5.1", ...`
-JM 不受影响，它用自己的 Profile/Level IDC 参数（如 51 = Level 5.1）。
+Valid strings: `"1", "2", "2.1", "3", "3.1", "4", "4.1", "5", "5.1", …`.
+JM is unaffected — it uses its own Profile/Level IDC parameter
+(e.g. 51 = Level 5.1).
 
-`configs/sequences/*.yaml` 里所有序列的 `level` 字段已经统一到合法格式。
-**加新序列时务必注意**：BlowingBubbles 用 `"3"`、Traffic 用 `"5"`，不要写 `"3.0"`。
+The `level` field in every `configs/sequences/*.yaml` has been normalised
+to the valid form. **When adding new sequences, be careful**: BlowingBubbles
+uses `"3"`, Traffic uses `"5"` — never write `"3.0"`.
 
-### 6.7 VTM/ECM AI cfg 自带 `TemporalSubsampleRatio=8`
+### 6.7 VTM/ECM AI cfgs ship with `TemporalSubsampleRatio=8`
 
-`configs/vtm/encoder_intra_vtm.cfg` 和 `configs/ecm/encoder_intra_ecm.cfg` 第 61 行
-默认 `TemporalSubsampleRatio: 8`。这是 JVET VVC CTC 的官方做法
-（见 §4.5），但 HM 18 默认是 1。
+Line 61 of both `configs/vtm/encoder_intra_vtm.cfg` and
+`configs/ecm/encoder_intra_ecm.cfg` defaults to `TemporalSubsampleRatio: 8`.
+This is the JVET VVC CTC default (see §4.5); HM 18 defaults to 1.
 
-**陷阱**：如果你不 aware 这件事，pilot 早期会出现 "VTM/ECM AI 只编了 8 帧、HM 编了 64
-帧"的诡异不对称——HM 走 64 帧，VTM/ECM 默默走了 8 帧子采样，BD-rate 比的根本不是同一组
-源帧。pilot 期间撞过这个坑，最后统一到全部走 TSR=8。
+**The trap**: if you're not aware of this, the early pilot exhibits the
+strange asymmetry "VTM/ECM AI only encoded 8 frames while HM encoded 64"
+— HM does 64 frames, VTM/ECM silently subsample to 8, and the BD-rate
+ends up comparing different source frames. We hit this during the pilot
+and resolved it by aligning all four encoders to TSR=8.
 
-`scripts/run_pilot.py` 现在对所有 AI 任务都强制 `TemporalSubsampleRatio=8`：HM/VTM/ECM
-走 `--TemporalSubsampleRatio=8` CLI，JM 用预抽的 `<Name>_AI_TSR8.yuv`。
+`scripts/run_pilot.py` now forces `TemporalSubsampleRatio=8` for every AI
+task: HM/VTM/ECM via `--TemporalSubsampleRatio=8` on the CLI, JM by
+reading the pre-decimated `<Name>_AI_TSR8.yuv` file.
 
-### 6.8 编码器 log 格式不统一（解析器要分四套）
+### 6.8 Encoder log formats differ (parser handles four dialects)
 
-`scripts/parse_logs.py` 内部维护两套正则：
+`scripts/parse_logs.py` maintains regexes for two main log dialects:
 
-| 编码器 | summary 块格式 | PSNR 行格式 |
+| Encoder | Summary block | PSNR line |
 |---|---|---|
-| JM 19  | `Average data all frames` | `Y { PSNR (dB), cSNR (dB), MSE } : { 41.514, ...` |
-| HM 18  | `SUMMARY ----------` | `Total Frames \| Bitrate Y-PSNR ...` |
-| VTM 23 | `LayerId 0`（无 SUMMARY 前缀） | 同 HM |
-| ECM 18 | `LayerId 0`（无 SUMMARY 前缀） | 同 HM |
+| JM 19  | `Average data all frames` | `Y { PSNR (dB), cSNR (dB), MSE } : { 41.514, …` |
+| HM 18  | `SUMMARY ----------` | `Total Frames \| Bitrate Y-PSNR …` |
+| VTM 23 | `LayerId 0` (no `SUMMARY ---` preamble) | same as HM |
+| ECM 18 | `LayerId 0` (no `SUMMARY ---` preamble) | same as HM |
 
-VTM/ECM 跟 HM 的列宽和分隔符也不完全一致——现在的正则用 `\s+` 容忍这种差异。如果以后
-升级到 VTM 24+ 或新版 ECM，先用 `make parse` 试一下，看 "WARN: could not parse" 行
-数。如果新版又改了格式，往 `parse_logs.py` 里的 `RE_HM_SUMMARY` 加一个 fallback。
+VTM/ECM column widths and separators don't exactly match HM — the current
+regex uses `\s+` to tolerate the difference. If you upgrade to VTM 24+ or
+a newer ECM, run `make parse` first and check for `WARN: could not parse`
+lines. If the format changed again, add a fallback to `RE_HM_SUMMARY` in
+`parse_logs.py`.
 
 ### 6.9 BD-rate "Insufficient curve overlap" warning
 
-`bjontegaard` 包在跨代对比时会打这种 warning（pilot 跑出 9 条）：
+The `bjontegaard` package emits this warning for cross-generation
+comparisons (9 of them during the pilot):
 
 ```
 UserWarning: Insufficient curve overlap: '47.40'. Minimum overlap: '75.00'.
 ```
 
-意思是两个编码器在 4 个 QP 点产生的码率范围重叠不够 75%，BD-rate 在重叠区外是外推
-而非积分，数值噪声较大。pilot 选 4 个 QP 是为了快；完整 CTC 时按 §4.6 扩到 6 QP 可缓解。
+Meaning: at the 4 chosen QPs, the bitrate ranges of the two encoders
+overlap less than 75%. Outside the overlap region, BD-rate is extrapolated
+rather than integrated, increasing numerical noise. The pilot chose 4 QPs
+for speed; full CTC should expand to 6 QPs (see §4.6).
 
-**不影响 BD-rate 的符号和量级，只影响小数点后第二位的精度**。论文里报告时建议给出
-overlap 度作为附注。
-
----
-
-## 7. 论文写作时的注意
-
-如果你接手到了准备投稿阶段：
-
-1. **方法学章节**必须引用 `docs/JM_CTC_alignment.md` 的内容（或把它改写成 paper section）。
-   审稿人最容易问的就是 "How did you align JM with CTC?"。
-2. **报告 BD-rate** 时给出 Y/U/V 三个分量、给出 95% 置信区间（多序列平均）。同时
-   引用 §6.9 的 overlap warning——如果你按 §4.6 扩了 QP 范围就不用说，不扩就要老实说明。
-3. **报告 encoding time** 时给 ratio，不给绝对值。说明 host machine 是 Mac Studio M4 Max
-   或者集群型号。
-4. **图：BD-rate gain vs encoding time multiplier** 是论文卖点，确保画出来。Pilot 已经
-   有了 `report/figures/time_scaling.png` 的雏形，但 RA/AI 没用不同 marker 区分，扩 CTC
-   后建议升级。
-5. 引用 Ohm et al. IEEE TCSVT 2012 作为方法学基准；引用 Bross et al. Proc. IEEE 2021
-   作为 VVC 章节的对照基准。
-6. **AI 子采样要说清楚**：pilot 用了 JVET CTC 默认的 TSR=8。如果只跑 RA 就不用提；
-   保留 AI 的话，方法学里写"AI BD-rate computed over frames {0, 8, 16, ..., 56}
-   per JVET CTC convention, with FrameRate adjusted to source_fps/TSR for consistent
-   kbps units across all four encoders"。
-7. **HM 比 JM 还快**（pilot 上 HM RA 比 JM 快约 25%）—— **不是编码算法本身**的快慢
-   差异。JM 19.1 几乎无 SIMD 优化，HM 18.0 经 10+ 年成熟优化。如果你想做"算法复杂度"
-   论证，注明"all measured times include reference-software optimization level differences"
-   即可；不要给"HEVC 比 AVC 算法上简单"这种误导性结论。
-8. **Class D 上 BD-rate 偏小**（pilot 跑 BlowingBubbles 比 BasketballDrill 各 pair
-   小 10-15 个百分点）—— well-known 的"小分辨率下新工具收益受限"现象。论文里
-   按 class 报告 BD-rate（不要混合平均），跟 JVET 自己的做法对齐。
+**This affects only the 2nd decimal place of BD-rate, not the sign or
+order of magnitude.** When reporting in the paper, include the overlap
+percentage as a note.
 
 ---
 
-## 8. 联系
+## 7. Notes for paper writing
 
-如果有问题不确定我当时为什么这么写，可以联系我：
+If you are taking over toward submission stage:
+
+1. **The methodology section must cite the content of
+   `docs/JM_CTC_alignment.md`** (or rewrite it as a paper section).
+   The most likely reviewer question is "how did you align JM with CTC?"
+2. **Report BD-rate** with Y/U/V channels and 95% confidence intervals
+   (averaged across sequences). Also mention the overlap warning from §6.9
+   — if you've expanded to 6 QPs per §4.6 this is moot, otherwise be
+   honest about it.
+3. **Report encoding time** as ratios, never absolute. State the host
+   machine (Mac Studio M4 Max, or the cluster model).
+4. **The figure "BD-rate gain vs encoding-time multiplier"** is the paper's
+   selling point — make sure it's in. The pilot's
+   `report/figures/time_scaling.png` is a first draft, but it does not yet
+   distinguish RA vs AI markers — upgrade after extending to full CTC.
+5. Cite Ohm et al. (IEEE TCSVT 2012) as the methodological baseline; cite
+   Bross et al. (Proc. IEEE 2021) as the VVC-section baseline.
+6. **The cumulative bar chart is the headline visualisation.** The pilot's
+   `report/figures/bdrate_summary.png` compares HM/VTM/ECM all against the
+   same JM (AVC) baseline, so the per-generation contribution is directly
+   readable. This is the bar chart to include — not the pairwise version.
+7. **AI subsampling must be explained.** The pilot uses the JVET CTC default
+   TSR=8. If you drop AI entirely, you don't need to mention it. Otherwise
+   include something like: "AI BD-rate is computed over frames
+   {0, 8, 16, …, 56} per JVET CTC convention, with FrameRate adjusted to
+   `source_fps/TSR` for consistent kbps units across all four encoders."
+8. **HM is faster than JM** (the pilot's HM RA is ~25% faster than JM)
+   — this is **not an algorithmic** speed difference. JM 19.1 has almost
+   no SIMD optimisation; HM 18.0 has 10+ years of optimisation. If you
+   discuss "algorithmic complexity," note explicitly that
+   "all measured times include reference-software optimisation level
+   differences." Do not draw the misleading conclusion that "HEVC is
+   algorithmically simpler than AVC."
+9. **Class D BD-rate is smaller** (the pilot's BlowingBubbles is 10–15
+   percentage points lower than BasketballDrill across pairs) — a
+   well-known "small-resolution dilutes new-tool benefits" phenomenon.
+   Report BD-rate per class (do not average across classes) — JVET does
+   the same.
+
+---
+
+## 8. Contact
+
+If you're unsure why I did something a particular way, you can reach me at:
 **xiangyu.wan / wanxiangyu82@gmail.com**
 
-祝顺利。
+Good luck.
 
-— xiangyu.wan, 2026-05（pilot 完整 baseline 跑完并记录）
+— xiangyu.wan, 2026-05 (pilot baseline completed and recorded)

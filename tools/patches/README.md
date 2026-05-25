@@ -1,28 +1,39 @@
 # Patches
 
-这个目录存放针对 `tools/` 下编码器源码的兼容性补丁。
+This directory stores compatibility patches for the encoder source trees under
+`tools/`.
 
-## 当前状态：备份用，不自动应用
+## Current status: kept for reference, not auto-applied
 
-本项目当前是把修改**直接 commit 到了** `tools/` 下的源码树（参见 `.gitignore` 注释）。这里的 patch 文件存在的目的是：
+This project currently **commits the modifications directly** into the source
+trees under `tools/` (see comments in `.gitignore`). The patch files here exist
+for two reasons:
 
-1. **diff 可读性**：以标准 unified-diff 格式记录每一处修改，方便 code review、写论文方法学章节、或在 git log 之外快速看清"我们改了什么"。
-2. **再应用能力**：如果未来源码树被替换（比如升级到 JM-19.2、或者接手人重新解压 zip 覆盖），这些 patch 可以再次应用回去，不丢修改。
+1. **Diff readability.** They record every modification in standard unified-diff
+   format — useful for code review, for writing the paper's methodology
+   section, or for quickly seeing "what did we change" outside `git log`.
+2. **Reapply-ability.** If the source trees are ever replaced (e.g. upgrading
+   to JM-19.2, or a future maintainer unzipping a fresh source archive over
+   them), these patches can be applied again without re-doing the work by hand.
 
-`scripts/build_all.sh` 目前**不**自动 apply 这些 patch（在源码已经修改的情况下 apply 会失败或者重复应用）。这是有意为之。
+`scripts/build_all.sh` does **not** auto-apply these patches today (applying
+them to an already-modified tree would either fail or double-apply). This is
+intentional.
 
-## 文件清单
+## File list
 
-| 文件 | 针对 | 改了什么 |
+| File | Targets | What it changes |
 |---|---|---|
-| `jm_arm_macos.patch` | `tools/JM-JM-19.1/` | 把 `-msse4.1` 编译 flag 限定到 x86/x86_64 才启用 |
-| `hm_arm_macos.patch` | `tools/HM-HM-18.0/` | 同上 + 把 SSE/AVX 源文件 GLOB 和 per-file 编译 flag 都加 arm64 守卫 |
+| `jm_arm_macos.patch` | `tools/JM-JM-19.1/` | Gates the `-msse4.1` compile flag so it only fires on x86/x86_64 |
+| `hm_arm_macos.patch` | `tools/HM-HM-18.0/` | Same as above, plus arm64 guards around the SSE/AVX source globs and per-file compile flags |
 
-VTM-23.11 和 ECM-18.0 的上游 CMakeLists 已经做了 arm64 处理，**不需要 patch**。
+VTM-23.11 and ECM-18.0 already handle arm64 in their upstream CMakeLists, so
+**no patches are needed** for them.
 
-## 如何在 pristine 源码上再应用
+## Re-applying on a pristine source tree
 
-如果接手人不小心覆盖了 `tools/JM-JM-19.1/` 或 `tools/HM-HM-18.0/`（比如重新解压 zip）：
+If a future maintainer accidentally overwrites `tools/JM-JM-19.1/` or
+`tools/HM-HM-18.0/` (for example by re-extracting a source zip):
 
 ```bash
 cd tools/JM-JM-19.1
@@ -32,30 +43,40 @@ cd ../HM-HM-18.0
 git apply ../patches/hm_arm_macos.patch
 ```
 
-`git apply` 在已经应用过的源码上会拒绝二次应用（输出 "patch does not apply"），所以**幂等地反复跑也不会出问题**。
+`git apply` refuses to apply a patch that is already applied (it prints
+"patch does not apply"), so **rerunning is idempotent and safe**.
 
-如果想在 `git apply` 之外用普通 `patch` 工具：
+If you prefer the standard `patch` tool instead of `git apply`:
 
 ```bash
 cd tools/JM-JM-19.1
 patch -p1 < ../patches/jm_arm_macos.patch
 ```
 
-## 如何切换到"patch 化"工作流（未来如需）
+## Switching to a "patch-driven" workflow (if needed later)
 
-如果项目体积超出 200 MB 想瘦身，可以改成：
+If the repository ever needs to shrink below 200 MB, you can switch to:
 
-1. 不 commit `tools/` 下的源码树（在 `.gitignore` 里加 `tools/*/`，但放行 `tools/patches/` 和 `tools/README.md`）
-2. 让 `scripts/build_all.sh` 在编译前自动 apply 这些 patch（脚本里已经有 `apply_patch_if_present` 函数，把它从 ARM 专属改成默认调用即可）
-3. 接手人先自己下载/解压编码器源码到 `tools/`，build 脚本自动打 patch
+1. Don't commit the source trees under `tools/` (add `tools/*/` to
+   `.gitignore`, but allow-list `tools/patches/` and `tools/README.md`).
+2. Have `scripts/build_all.sh` auto-apply these patches before configuring
+   CMake (the script already has an `apply_patch_if_present` helper — change
+   it from "ARM-only" to "always" and you're done).
+3. The maintainer downloads/extracts the encoder source trees into `tools/`
+   themselves, and the build script applies patches on top.
 
-那时 repo 大小可以缩到几 MB，代价是接手人需要手工准备 `tools/` 源码（zip 下载链接写在 `tools/README.md`）。当前阶段不必这么做。
+The repo would then shrink to a few MB, at the cost of asking the maintainer
+to prepare `tools/` by hand (zip download links go in `tools/README.md`).
+There's no need to do this in the current phase.
 
-## 升级源码版本时的注意
+## When you upgrade source versions
 
-如果你升级到 JM-19.2 / HM-19.0 等新版本，**这些 patch 大概率不再 apply-clean**（上下文行号会偏移，或者上游已经自带 arm64 守卫）。处理方式：
+If you upgrade to JM-19.2 / HM-19.0 / etc., these patches will most likely
+**no longer apply cleanly** — context line numbers will have shifted, or the
+upstream may have added arm64 guards itself. To handle that:
 
-1. 先尝试 `git apply --check` 确认是否还能应用
-2. 应用失败的话，对照 patch 内容手工再做一遍同样的修改
-3. 用 `diff -u` 重新生成新版本对应的 patch 文件，替换这里的旧 patch
-4. 在 `HANDOFF.md` 里记录版本变更
+1. First try `git apply --check` to see whether the patch still applies.
+2. If it fails, manually redo the equivalent change in the new source tree.
+3. Regenerate the patch with `diff -u` against the new pristine source and
+   replace the old patch file here.
+4. Record the version change in `HANDOFF.md`.

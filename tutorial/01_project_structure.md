@@ -1,87 +1,94 @@
-# 01 — 项目结构详解
+# 01 — Project Structure Walkthrough
 
-> 这一篇逐项说明每个目录和每个文件做什么用，让你打开任意文件都知道为什么它在那里。
-> 这份文档与 `README.md` 互补：README 偏入口和 quick-start，这一篇偏"文件级 walkthrough"。
+> This document walks through every directory and key file in the project so
+> that, when you open any file, you know why it lives where it does.
+> It complements `README.md`: README is the entry point and quick-start; this
+> document is a file-level walkthrough.
 
 ---
 
-## 1. 顶层视图
+## 1. Top-level view
 
 ```
 codec-comparison-pilot/
-├── README.md                ← 项目入口与 quick-start
-├── HANDOFF.md               ← 毕业交接文档
-├── Makefile                 ← 顶层 make targets
-├── requirements.txt         ← Python 依赖
-├── .gitignore               ← 忽略列表
-├── .venv/                   ← Python 虚拟环境（make venv 创建）
+├── README.md                ← project entry point and quick-start
+├── HANDOFF.md               ← post-graduation handoff document
+├── Makefile                 ← top-level make targets
+├── requirements.txt         ← Python dependencies
+├── .gitignore               ← ignore list
+├── .venv/                   ← Python virtual env (created by `make venv`)
 │
-├── configs/                 ← 所有 CTC 配置 + pilot scope 控制
-├── docs/                    ← 项目级技术文档
-├── tutorial/                ← 你正在读的教程（00–03 + 入口 README）
-├── report/                  ← 最终结果报告与图（build_report.py 产出）
-├── scripts/                 ← 全部 8 个 Python/Shell 脚本
-├── tools/                   ← 编码器源码（已入 git，跨平台 patch 必须随源码走）
-├── sequences/               ← 原始 YUV（git ignored，外挂）
-├── bin/                     ← 编码器二进制（make build 产出）
-├── runs/                    ← 每次运行的中间产物
-├── results/                 ← 解析后的 CSV 与 baseline
-└── logs/                    ← 顶层级别的日志（基本未用，预留）
+├── configs/                 ← all CTC configs + pilot scope control
+├── docs/                    ← project-level technical documentation
+├── tutorial/                ← this tutorial series (00–03 + entry README)
+├── report/                  ← final report and figures (produced by build_report.py)
+├── scripts/                 ← all 8 Python/Shell scripts
+├── tools/                   ← encoder source trees (tracked in git; arm-macOS patches travel with the source)
+├── sequences/               ← raw YUV files (gitignored; external)
+├── bin/                     ← encoder binaries (produced by `make build`)
+├── runs/                    ← per-run intermediate artefacts
+├── results/                 ← parsed CSVs and baseline
+└── logs/                    ← top-level logs (reserved, mostly unused for now)
 ```
 
-下面分四类详细说明：**入口文件**、**配置目录**、**脚本目录**、**输出目录**。
+Four groups follow: **entry files**, **configs**, **scripts**, and **outputs**.
 
 ---
 
-## 2. 顶层入口文件
+## 2. Top-level entry files
 
 ### 2.1 `README.md`
 
-项目第一眼看到的文件。包含：
+The first thing anyone sees. Contains:
 
-- 项目 scope 摘要（2 序列、2 配置、4 QP）
-- 快速启动命令（`make venv` → `make build` → `make encode`）
-- 整体目录结构示意图
-- 编码器版本固定表
-- 平台支持说明
+- Pilot scope summary (2 sequences, 2 configs, 4 QPs)
+- Quick-start commands (`make venv` → `make build` → `make encode`)
+- Directory layout overview
+- Pinned encoder versions table
+- Platform-support notes
 
-**适用读者**：第一次接触本项目的人。看完应该能动手开始跑。
+**Audience:** anyone meeting the project for the first time. After reading
+it, they should be able to start running things.
 
 ### 2.2 `HANDOFF.md`
 
-写给毕业后接手的同学的文档。包含：
+The document for the person who takes over after the original author
+graduates. Contains:
 
-- 如何复现 pilot baseline（**第一件事**）
-- 编码器版本不能改的纪律
-- 如何扩展到完整 CTC（Class A、LDB/LDP、Linux 集群）
-- 已知 pitfalls（ARM macOS 编译、路径空格、BD-rate 实现差异）
-- 论文写作时的注意事项
+- How to reproduce the pilot baseline (**first thing to do**)
+- The discipline around pinned encoder versions
+- How to extend to full CTC (Class A, LDB/LDP, Linux cluster)
+- Known pitfalls (ARM macOS build, paths with spaces, BD-rate implementation
+  differences)
+- Notes for paper writing
 
-**适用读者**：师弟师妹、未来的项目维护者。
+**Audience:** the successor, the future project maintainer.
 
 ### 2.3 `Makefile`
 
-整个项目对外暴露的 entry point。所有具体逻辑都委托给 `scripts/` 下的脚本，Makefile 本身保持轻薄。Targets：
+The project's outward-facing entry point. All concrete logic is delegated
+to scripts under `scripts/`; the Makefile itself stays thin. Targets:
 
-| Target | 委托给 | 用途 |
+| Target | Delegates to | Purpose |
 |---|---|---|
-| `make help` | (Makefile 自身) | 列出所有 targets |
-| `make venv` | `scripts/setup_env.sh` | 创建 .venv 并装依赖 |
-| `make build` | `scripts/build_all.sh` | 编译四个编码器 |
-| `make build-<encoder>` | 同上，单编码器 | 单独编译 JM/HM/VTM/ECM |
-| `make sanity` | `scripts/build_sanity_check.py` | 每个编码器跑一次最小编码 |
-| `make encode-dry` | `scripts/run_pilot.py --dry-run` | 打印任务矩阵但不执行 |
-| `make encode` | `scripts/run_pilot.py` | 跑完整 pilot 矩阵 |
-| `make parse` | `scripts/parse_logs.py` | 从日志提取指标 |
-| `make bdrate` | `scripts/compute_bdrate.py` | 计算 BD-rate |
-| `make report` | `scripts/build_report.py` | 生成 Markdown 报告 |
-| `make verify-baseline` | `scripts/verify_baseline.py` | 与 baseline 对比验证 |
-| `make clean-runs` | (rm) | 清空 runs/ |
-| `make clean` | (rm) | 清空 .venv、bin、runs、results |
+| `make help` | (Makefile itself) | List all targets |
+| `make venv` | `scripts/setup_env.sh` | Create .venv and install deps |
+| `make build` | `scripts/build_all.sh` | Build all four encoders |
+| `make build-<encoder>` | same, single encoder | Build just JM/HM/VTM/ECM |
+| `make sanity` | `scripts/build_sanity_check.py` | One tiny encode per encoder |
+| `make subsample-ai` | `scripts/extract_ai_subsample.py` | Pre-extract every-8th-frame YUVs for JM AI |
+| `make encode-dry` | `scripts/run_pilot.py --dry-run` | Print task matrix without executing |
+| `make encode` | `scripts/run_pilot.py` | Run the full pilot matrix |
+| `make parse` | `scripts/parse_logs.py` | Extract metrics from logs |
+| `make bdrate` | `scripts/compute_bdrate.py` | Compute BD-rate |
+| `make report` | `scripts/build_report.py` | Generate Markdown report |
+| `make verify-baseline` | `scripts/verify_baseline.py` | Verify against the committed baseline |
+| `make clean-runs` | (rm) | Clear `runs/` |
+| `make clean` | (rm) | Clear .venv, bin, runs, results |
 
 ### 2.4 `requirements.txt`
 
-Python 依赖列表，固定最低版本但不锁死：
+Python dependency list. Pinned minimum versions, not exact pins:
 
 ```
 numpy>=1.26
@@ -90,34 +97,41 @@ scipy>=1.12
 matplotlib>=3.8
 pyyaml>=6.0
 tqdm>=4.66
-bjontegaard-metric>=1.0.4
+bjontegaard>=1.3.0
+tabulate>=0.9
 ```
 
-依赖很轻，没有任何"重型"科学计算包。`bjontegaard-metric` 是 BD-rate 计算的成熟实现，避免自己写一份。
+Dependencies are intentionally lightweight — no heavyweight scientific
+computing packages. `bjontegaard` (FAU-LMS, on PyPI) is the community-trusted
+implementation of BD-rate, used so we don't roll our own.
 
 ### 2.5 `.gitignore`
 
-约束哪些东西不进 git。规则覆盖：
+Constrains what does and doesn't enter git. Covers:
 
-- Python 产物：`.venv/`, `__pycache__/`, `*.pyc`
-- 编码器二进制：`bin/`（每台机器自己编）
-- 原始视频与编码输出：`sequences/*.yuv`, `*.bin`, `*.264`, `*_rec.yuv` 等
-- 运行产物：`runs/`（按时间戳分目录，本地堆几十 GB）
-- OS 杂物：`.DS_Store`, `Thumbs.db`
+- Python artefacts: `.venv/`, `__pycache__/`, `*.pyc`
+- Encoder binaries: `bin/` (built locally on each machine)
+- Raw videos and encoded output: `sequences/*.yuv`, `*.bin`, `*.264`,
+  `*_rec.yuv`, etc.
+- Run artefacts: `runs/` (per-timestamp directories that can grow to tens of GB)
+- OS junk: `.DS_Store`, `Thumbs.db`
 
-**保留进 git** 的东西：脚本、配置、文档、`results/*.csv`（pilot baseline 的 CSV 必须入库）、`sequences/MANIFEST.csv`（序列清单，但不包括 YUV 本身）。
+**Kept in git**: scripts, configs, documentation, `results/*.csv` (the pilot
+baseline CSV must be tracked), `sequences/MANIFEST.csv` (the sequence
+manifest, though the YUVs themselves are not).
 
 ---
 
-## 3. `configs/` — 配置中心
+## 3. `configs/` — the configuration centre
 
-这是项目最重要的目录之一。所有"什么序列、什么 QP、什么配置"的决策都集中在这里。
+One of the most important directories in the project. Every decision about
+"which sequences, which QPs, which configs" is concentrated here.
 
 ```
 configs/
-├── pilot.yaml                  ← scope 总控
+├── pilot.yaml                  ← scope master control
 ├── jm/
-│   ├── encoder_JM_Intra_HE.cfg   ← JM 全 Intra (AI)
+│   ├── encoder_JM_Intra_HE.cfg   ← JM All-Intra (AI)
 │   ├── encoder_JM_RA_B_HE.cfg    ← JM Random Access
 │   ├── encoder_JM_LB_HE.cfg      ← JM Low-Delay B
 │   └── encoder_JM_LP_HE.cfg      ← JM Low-Delay P
@@ -137,44 +151,47 @@ configs/
 │   ├── encoder_lowdelay_ecm.cfg
 │   └── encoder_lowdelay_P_ecm.cfg
 └── sequences/
-    ├── BasketballDrill.yaml    ← Class C, pilot 启用
-    ├── BlowingBubbles.yaml     ← Class D, pilot 启用
-    ├── Traffic.yaml            ← Class A1, 未来扩展用 stub
-    └── PeopleOnStreet.yaml     ← Class A2, 未来扩展用 stub
+    ├── BasketballDrill.yaml    ← Class C, enabled in pilot
+    ├── BlowingBubbles.yaml     ← Class D, enabled in pilot
+    ├── Traffic.yaml            ← Class A1, stub for future expansion
+    └── PeopleOnStreet.yaml     ← Class A2, stub for future expansion
 ```
 
 ### 3.1 `configs/pilot.yaml`
 
-scope 控制文件。改这一个文件就能改整个 pilot 的范围：
+The scope-control file. Edit this one file to change the entire pilot scope:
 
 ```yaml
 encoders:    [jm, hm, vtm, ecm]
-configs:     [AI, RA]         # 取消 LDB/LDP 注释来扩展
+configs:     [AI, RA]         # uncomment LDB/LDP to extend
 qps:         [22, 27, 32, 37]
 sequences:   [BasketballDrill, BlowingBubbles]
 frames_to_encode: 64
-parallel_jobs: 4
+parallel_jobs: 5
 job_timeout_sec: 86400
 keep_recon: false
 run_dir_pattern: "%Y-%m-%d_%H%M_pilot"
 ```
 
-`scripts/run_pilot.py` 把这份 YAML 作为单一真理源。
+`scripts/run_pilot.py` treats this YAML as the single source of truth.
 
 ### 3.2 `configs/{jm,hm,vtm,ecm}/`
 
-每个编码器 4 个 CTC 配置文件（AI / RA / LDB / LDP）。
+Four CTC configuration files per encoder (AI / RA / LDB / LDP).
 
-**这些文件不是我手写的，是从各编码器源码 `cfg/` 目录原样拷过来的**：
+**These files are not hand-written — they are copied verbatim from each
+encoder source tree's `cfg/` directory**:
 
-- JM 的来自 `tools/JM-JM-19.1/cfg/HM-like/`（JM 维护者为对齐 HM CTC 专门提供的）
-- HM / VTM / ECM 的来自各自 `cfg/` 根目录的官方 CTC 配置
+- JM's come from `tools/JM-JM-19.1/cfg/HM-like/` (the JM maintainers' own
+  HM-aligned CTC presets)
+- HM / VTM / ECM's come from each encoder's official `cfg/` directory
 
-详见 [02 JM 配置详解](02_jm_config_explained.md)。
+See [02 JM config explained](02_jm_config_explained.md) for details.
 
 ### 3.3 `configs/sequences/<name>.yaml`
 
-每个测试序列一个 YAML，记录元数据（不含具体 codec 参数）：
+One YAML per test sequence, recording metadata (no codec-specific
+parameters):
 
 ```yaml
 name: BasketballDrill
@@ -187,261 +204,342 @@ chroma_format: 420
 total_frames: 500
 level: "3.1"
 yuv_filename: BasketballDrill_832x480_50.yuv
-md5: ""                       # 下载后填入
+md5: ""                       # filled in after download
 source_url: "ftp://..."
 ```
 
-`run_pilot.py` 根据这些字段动态生成传给编码器的命令行参数。
+`run_pilot.py` reads these fields and synthesises the appropriate per-encoder
+CLI arguments.
 
-**为什么不直接用各编码器自带的 per-sequence cfg？** 因为它们路径写死、互不一致、JM 的还是 Windows 路径。本项目用一份统一的 YAML，运行时翻译成各编码器的方言。
+**Why not just use each encoder's own per-sequence cfg files?** Because
+they have hard-coded paths, the conventions differ across encoders, and
+JM's even ships with Windows-style paths. Using one unified YAML and
+translating into each encoder's dialect at runtime is much cleaner.
 
 ### 3.4 `configs/sequences/{Traffic,PeopleOnStreet}.yaml`
 
-Class A1/A2 的 stub。Pilot **不用**，但提前写好，毕业后扩展时直接取消 pilot.yaml 里对应行的注释就生效，不用现写。
+Stubs for Class A1/A2. **Not used in pilot**, but pre-written so that
+extending later only requires uncommenting the corresponding entry in
+`pilot.yaml` — no on-the-fly authoring needed.
 
 ---
 
-## 4. `scripts/` — 全部 8 个脚本
+## 4. `scripts/` — all 8 scripts
 
 ```
 scripts/
-├── setup_env.sh              ← (Bash) Python venv 创建与依赖安装
-├── build_all.sh              ← (Bash) 跨平台编译四个编码器
-├── build_sanity_check.py     ← (Python) 每编码器跑一次最小编码
-├── run_pilot.py              ← (Python) 任务调度与执行
-├── parse_logs.py             ← (Python) 日志解析为统一 CSV
-├── compute_bdrate.py         ← (Python) BD-rate 计算
-├── build_report.py           ← (Python) 生成 Markdown 报告与图
-└── verify_baseline.py        ← (Python) 与 baseline 比较验证
+├── setup_env.sh                ← (Bash) create venv and install deps
+├── build_all.sh                ← (Bash) cross-platform build for all four encoders
+├── build_sanity_check.py       ← (Python) one tiny encode per encoder
+├── extract_ai_subsample.py     ← (Python) pre-decimate YUVs for JM AI
+├── run_pilot.py                ← (Python) task scheduling and execution
+├── parse_logs.py               ← (Python) parse logs into a unified CSV
+├── compute_bdrate.py           ← (Python) BD-rate computation
+├── build_report.py             ← (Python) generate Markdown report + figures
+└── verify_baseline.py          ← (Python) regress against the baseline
 ```
 
 ### 4.1 `setup_env.sh`
 
-幂等的 venv 初始化脚本。逻辑：
+Idempotent venv initialiser. Logic:
 
-1. 找一个 Python 解释器（优先 `python3`）
-2. 检查版本 ≥ 3.10
-3. 在 `.venv/` 创建虚拟环境（如已存在则跳过）
-4. 升级 pip / wheel / setuptools
-5. `pip install -r requirements.txt`
+1. Find a Python interpreter (preferring `python3`).
+2. Verify version ≥ 3.10.
+3. Create the virtual env in `.venv/` (skip if it already exists).
+4. Upgrade pip / wheel / setuptools.
+5. `pip install -r requirements.txt`.
 
-可以反复运行，不会破坏已有环境。
+Safe to rerun — it won't break an existing environment.
 
 ### 4.2 `build_all.sh`
 
-跨平台编译脚本，是本项目最重要的 Bash 脚本。
+The cross-platform build script. The most important Bash script in the
+project.
 
-关键设计：
+Key design points:
 
-- **平台自动检测**：`uname -s` 区分 Darwin / Linux，分别用 `sysctl -n hw.ncpu` / `nproc` 获取并发度
-- **源码外挂**：默认在 `tools/` 下找各编码器源码；可通过 `TOOLS_DIR` 环境变量指向外部目录
-- **glob 匹配**：用 `JM-JM-*` / `HM-HM-*` / `VVCSoftware_VTM-VTM-*` / `ECM-ECM-*` 模糊匹配，不锁死版本号小数位
-- **统一编译流程**：每个编码器都是 `cmake ... -DCMAKE_BUILD_TYPE=Release && cmake --build . --target <ENC>`
-- **ARM macOS 兼容**：自动 apply `tools/patches/<encoder>_arm_macos.patch`（若存在）
-- **支持子集**：`./scripts/build_all.sh vtm ecm` 只编 VTM 和 ECM
-- **统一命名**：编译产物都拷到 `bin/`，二进制改名为 `lencod` / `TAppEncoder` / `EncoderApp_VTM` / `EncoderApp_ECM`
+- **Platform auto-detection**: `uname -s` distinguishes Darwin vs Linux,
+  and parallelism is determined via `sysctl -n hw.ncpu` (macOS) or `nproc`
+  (Linux).
+- **External source trees**: defaults to looking under `tools/`; the
+  `TOOLS_DIR` env var points to an external directory instead.
+- **Glob matching**: `JM-JM-*` / `HM-HM-*` / `VVCSoftware_VTM-VTM-*` /
+  `ECM-ECM-*` — minor versions aren't locked.
+- **Unified build flow**: each encoder is configured and built with
+  `cmake … && cmake --build . --target <ENC>`. On macOS the Xcode generator
+  is used; on Linux, Unix Makefiles.
+- **ARM macOS compatibility**: auto-applies `tools/patches/<encoder>_arm_macos.patch`
+  if present.
+- **Subset support**: `./scripts/build_all.sh vtm ecm` builds only VTM and ECM.
+- **Unified naming**: artefacts are copied into `bin/` with consistent names:
+  `lencod`, `TAppEncoder`, `EncoderApp_VTM`, `EncoderApp_ECM`.
 
 ### 4.3 `build_sanity_check.py`
 
-编译后的第一道质量门。逻辑：
+The first quality gate after building. Logic:
 
-- 用 BlowingBubbles 的前 16 帧 AI 配置 QP=37（最便宜的工作负载）
-- 对每个编码器跑一次完整编码
-- 验证：进程 exit code = 0，且 bitstream 文件非空
-- 任何编码器失败都报错并打印 stderr 末尾 10 行
+- Run AI on the first 16 frames of BlowingBubbles at QP=37 (the cheapest
+  workload).
+- One full encode per encoder.
+- Verify: exit code = 0, and the bitstream file is non-empty.
+- On any failure, print the last 10 lines of stderr.
 
-跑通 sanity 之后才有底气跑完整 64 任务的 pilot。
+Passing sanity gives you confidence to launch the full 64-task pilot.
 
-### 4.4 `run_pilot.py`
+### 4.4 `extract_ai_subsample.py`
 
-任务调度核心。约 300 行 Python，做几件事：
+Pre-decimates source YUVs for JM's AI mode. JM has no native
+`TemporalSubsampleRatio`, so to align with VTM/ECM (which use TSR=8 in their
+AI configs by default), this script reads every 8th frame from each source
+YUV and writes a smaller `<Name>_AI_TSR8.yuv` for JM to read.
 
-1. 读取 `configs/pilot.yaml` + 各 sequence YAML
-2. 展开任务矩阵：(encoder × sequence × config × qp) = 64 个 Job
-3. 为每个 Job 构造命令行（JM 和 HM/VTM/ECM 的 CLI 语法不同，分别处理）
-4. 用 `concurrent.futures.ProcessPoolExecutor` 并发执行
-5. 任务状态持久化到 `runs/<timestamp>/jobs.csv`，支持断点续跑
+Run automatically as a dependency of `make encode`. Idempotent — skips files
+that already exist.
 
-关键设计点：
+See [02 JM config explained](02_jm_config_explained.md) §AI subsampling for
+the methodology.
 
-- **CLI 抽象**：`build_cmd_jm` 和 `build_cmd_hm_vtm_ecm` 两个函数屏蔽编码器差异
-- **可恢复性**：每个 Job 跑完立即更新 jobs.csv，中断重启时跳过 status=DONE 的任务
-- **按预期耗时排序**：JM → HM → VTM → ECM 升序，让"便宜"任务先 fail 早暴露问题
-- **支持 `--dry-run`**：打印所有命令但不执行，便于调试
-- **支持 `--jobs N`**：覆盖 pilot.yaml 中的并发度
-- **支持 `--run-id`**：恢复一个已有运行目录
+### 4.5 `run_pilot.py`
 
-### 4.5 `parse_logs.py`
+The task-scheduling core. About 300 lines of Python. Does several things:
 
-日志解析器，把各编码器的输出格式统一成 CSV。
+1. Read `configs/pilot.yaml` and each sequence YAML.
+2. Expand the task matrix: `(encoder × sequence × config × qp)` = 64 Jobs.
+3. Synthesise the command line for each Job (JM vs HM/VTM/ECM have very
+   different CLI grammars, handled by separate builders).
+4. Execute concurrently via `concurrent.futures.ProcessPoolExecutor`.
+5. Persist task state to `runs/<timestamp>/jobs.csv`, supporting resume.
 
-关键正则：
+Design highlights:
 
-- **HM/VTM/ECM**：找 `SUMMARY ---` 块，提取 frame count、bitrate、Y/U/V PSNR、total time
-- **JM**：找 `PSNR Y(dB)`、`PSNR U(dB)`、`PSNR V(dB)`、`Bit rate`、`Total encoding time` 几个字段（JM 的输出格式更松散，需要多个独立正则）
+- **CLI abstraction**: `build_cmd_jm` vs `build_cmd_hm_vtm_ecm` hide
+  per-encoder syntax differences.
+- **Resumability**: each Job updates `jobs.csv` on completion; restart skips
+  any job with `status=DONE`.
+- **Ordered by expected cost**: JM → HM → VTM → ECM, so cheap tasks fail
+  early and expose problems quickly.
+- **`--dry-run`**: print all commands but don't execute.
+- **`--jobs N`**: override pilot.yaml's `parallel_jobs`.
+- **`--run-id`**: resume an existing run directory.
 
-输出 `results/raw_metrics.csv`：
+### 4.6 `parse_logs.py`
+
+The log parser. Unifies each encoder's output format into a single CSV.
+
+Key regexes:
+
+- **HM**: finds the `SUMMARY ----` block and extracts frame count, bitrate,
+  Y/U/V PSNR, total time.
+- **VTM 23 / ECM 18**: same fields, but the SUMMARY block lacks the
+  `SUMMARY ----` preamble — instead it's prefixed by `LayerId 0`. The
+  parser's regex matches the shared `Total Frames | Bitrate | Y-PSNR | …`
+  header line, which is present in both dialects.
+- **JM**: looks for `Y { PSNR (dB)`, `U { PSNR (dB)`, `V { PSNR (dB)`,
+  `Bit rate`, `Total encoding time` (JM's output is looser, requiring
+  several independent regexes).
+
+Output `results/raw_metrics.csv`:
 
 ```csv
 job_id,encoder,sequence,config,qp,frames_encoded,bitrate_kbps,
 psnr_y_db,psnr_u_db,psnr_v_db,enc_time_sec
 ```
 
-写完后自动做单调性检查（QP↑ → bitrate↓ 应该总成立），任何反例都警告。
+After writing, it does a monotonicity sanity check (QP↑ should always
+imply bitrate↓), warning on any violation.
 
-### 4.6 `compute_bdrate.py`
+### 4.7 `compute_bdrate.py`
 
-BD-rate 计算。对每个 (sequence, config) 计算四组对比：
+BD-rate computation. For each `(sequence, config)`, computes two views:
 
+Per-generation single-step gains:
 - HM vs JM
 - VTM vs HM
 - ECM vs VTM
-- ECM vs JM（累计）
 
-对 Y/U/V 三个分量分别算。
+Cumulative-vs-AVC gains (used by the primary bar chart):
+- HM vs JM (same as above)
+- VTM vs JM
+- ECM vs JM
 
-实现策略：
+Computed separately for Y / U / V channels.
 
-1. 优先调 PyPI 的 `bjontegaard-metric` 包（社区成熟实现）
-2. 找不到就 fallback 到内置的 piecewise cubic 实现（Bjøntegaard 2001 经典做法）
+Implementation:
 
-输出 `results/bdrate_table.csv` 和 `results/time_ratio.csv`（编码时间倍数）。
+1. Calls the PyPI `bjontegaard` package (community-trusted implementation).
+2. Falls back to a built-in piecewise-cubic version if unavailable.
 
-### 4.7 `build_report.py`
+Output `results/bdrate_table.csv` and `results/time_ratio.csv` (encoding
+time multipliers).
 
-生成最终 Markdown 报告 + PNG 图表。
+### 4.8 `build_report.py`
 
-会产生：
+Generates the final Markdown report and PNG figures.
 
-- `report/pilot_results.md` —— 主报告（BD-rate 表 + 时间比表 + 图）
-- `report/figures/rd_<sequence>_<config>.png` —— 每个 (序列, 配置) 一张 RD 曲线
-- `report/figures/bdrate_summary.png` —— BD-rate 柱状图汇总
-- `report/figures/time_scaling.png` —— 编码时间比散点（log 尺度）
+Produces:
 
-### 4.8 `verify_baseline.py`
+- `report/pilot_results.md` — main report (BD-rate table + time-ratio table + figures)
+- `report/figures/rd_<sequence>_<config>.png` — one RD curve per `(sequence, config)`
+- `report/figures/bdrate_summary.png` — primary BD-rate bar chart, with all
+  three test encoders compared against the same JM baseline so the
+  per-generation cumulative gain is directly readable
+- `report/figures/time_scaling.png` — encoding-time scatter (log scale)
 
-质量护栏。逻辑：
+### 4.9 `verify_baseline.py`
 
-- 比较 `results/raw_metrics.csv`（当前）与 `results/pilot_baseline.csv`（基线）
-- 容差：`|ΔY-PSNR| < 0.05 dB` 且 `|Δbitrate|/baseline < 1%`
-- 第一次运行（无 baseline）时，自动把当前结果 stamp 为 baseline
-- 不通过则打印偏差超标的所有 (encoder, sequence, config, qp) 组合
+The quality guardrail. Logic:
 
-这是接手人扩展时必跑的回归测试。**如果未来某次升级 ECM 后这个脚本不过，团队就该停下来排查**，而不是闷头继续跑完整 CTC。
+- Compares `results/raw_metrics.csv` (current) against
+  `results/pilot_baseline.csv` (baseline).
+- Tolerance: `|ΔY-PSNR| < 0.05 dB` and `|Δbitrate|/baseline < 1%`.
+- First-time run (no baseline): stamps the current results as the baseline
+  automatically.
+- On failure: prints every `(encoder, sequence, config, qp)` that exceeded
+  the tolerance.
+
+This is the regression test the successor must run when extending. **If a
+future ECM upgrade fails this script, the team should stop and investigate**,
+not blindly run the full CTC.
 
 ---
 
-## 5. `tools/` — 编码器源码（入 git）
+## 5. `tools/` — encoder source (tracked in git)
 
 ```
 tools/
-├── README.md                       ← 解释源码放置方式
-├── patches/                        ← ARM macOS 兼容补丁（空目录，按需添加）
+├── README.md                       ← explains how source is placed
+├── patches/                        ← ARM macOS compatibility patches
 ├── JM-JM-19.1/
 ├── HM-HM-18.0/
 ├── VVCSoftware_VTM-VTM-23.11/
 └── ECM-ECM-18.0/
 ```
 
-**四个编码器源码都入 git**。原因：本项目对 `JM-JM-19.1/CMakeLists.txt`、`HM-HM-18.0/CMakeLists.txt` 以及 `HM-HM-18.0/source/Lib/TLibCommon/CMakeLists.txt` 做了 ARM macOS 兼容性修改（把硬编码的 `-msse4.1` 改为只在 x86 上启用）。这些修改必须随项目分发，不能只靠下载方提示对方"自己再改一次"——所以源码连同修改一起入 git。
+**All four encoder source trees are tracked in git.** Reason: this project
+has modified `JM-JM-19.1/CMakeLists.txt`, `HM-HM-18.0/CMakeLists.txt`, and
+`HM-HM-18.0/source/Lib/TLibCommon/CMakeLists.txt` for ARM macOS compatibility
+(gating hard-coded `-msse4.1` flags to x86 only). Those modifications must
+travel with the project — we can't rely on a downloader re-applying them.
+So the sources, including the modifications, are committed.
 
-`.gitignore` 排除掉了构建产物：
+`.gitignore` excludes build outputs:
 
-- `tools/*/build/`  ← CMake 生成的 build 目录
-- `tools/*/lib/`    ← HM/VTM/ECM 编译出来的静态库目录（注意：JM 的 `source/lib/` 不受影响，那是真正的源码库）
-- `tools/*/bin/`    ← 编译出来的二进制（通过项目根的 `bin/` 全局规则覆盖）
+- `tools/*/build/`  ← CMake-generated build directories
+- `tools/*/lib/`    ← HM/VTM/ECM compiled static-library directories
+  (note: JM's `source/lib/` is genuine source, unaffected by this rule)
+- `tools/*/bin/`    ← compiled binaries (covered by the project-root
+  `bin/` rule)
 
-source/、cfg/、cmake/、CMakeLists.txt、README 等都入库。
+`source/`, `cfg/`, `cmake/`, `CMakeLists.txt`, READMEs, etc. are all tracked.
 
-### 体积
+### Size
 
-四个编码器源码 commit 后约 **170 MB**（ECM 最大，约 130 MB，其他都很小）。对 git 不算夸张，clone 一次就够用。
+After committing, the four source trees total ~**170 MB** (ECM is the
+biggest at ~130 MB; the others are small). Not unreasonable for git — a
+one-time clone covers everyone.
 
 ### `tools/patches/`
 
-留给未来如果还有不便直接修改源码的兼容性补丁。当前为空——直接改源码更直接，patch 机制保留为后备方案。
+Reserved for future compatibility patches that, for some reason, can't be
+applied directly to source. Currently empty in active use — directly
+editing source is more direct; the patch mechanism is kept as a fallback.
 
-### 如果你需要换源码版本
+### If you need to change source versions
 
-如果未来要升级到 JM-19.2 / HM-19.0 / VTM-24.x / ECM-19.x，建议这样做：
+To upgrade to e.g. JM-19.2 / HM-19.0 / VTM-24.x / ECM-19.x:
 
-1. 把新版本源码替换到 `tools/<encoder>-<new-version>/`
-2. 把对应的 ARM 兼容补丁再应用一次（diff 旧版 CMakeLists 看具体改动）
-3. 更新 `scripts/build_all.sh` 的 glob pattern（如果版本号格式变了）
-4. 更新 `README.md` 和 `HANDOFF.md` 的版本固定表
-5. 重跑 pilot，验证 baseline 在新版本下的差异
+1. Replace the source tree at `tools/<encoder>-<new-version>/`.
+2. Re-apply the ARM compatibility changes (diff the old CMakeLists to
+   see exactly what was changed).
+3. Update `scripts/build_all.sh`'s glob pattern if the version-number format
+   has changed.
+4. Update the pinned-version tables in `README.md` and `HANDOFF.md`.
+5. Rerun the pilot and verify the baseline diff against the new version.
 
 ---
 
-## 6. `sequences/` — 原始 YUV
+## 6. `sequences/` — raw YUV
 
 ```
 sequences/
-├── README.md           ← 下载与放置说明
-├── MANIFEST.csv        ← 文件清单 + 期望 MD5
-└── *.yuv               ← 实际 YUV 文件（gitignored）
+├── README.md           ← download and placement instructions
+├── MANIFEST.csv        ← file list + expected MD5
+└── *.yuv               ← actual YUV files (gitignored)
 ```
 
 ### `sequences/MANIFEST.csv`
 
-序列文件清单，记录文件名、分辨率、帧率、位深、总帧数、MD5、来源 URL。这个文件**入 git**，作为序列依赖的官方声明。
+The sequence inventory: filename, resolution, fps, bit depth, total frames,
+MD5, source URL. This file **is tracked in git** as the authoritative
+declaration of sequence dependencies.
 
 ### `sequences/README.md`
 
-告诉接手人到哪里下载 YUV、怎么计算 MD5、怎么把 MD5 填回 `configs/sequences/<name>.yaml`。
+Tells the successor where to download the YUVs, how to compute MD5s, and
+how to fill them back into `configs/sequences/<name>.yaml`.
 
-### YUV 文件
+### YUV files themselves
 
-不入 git。文件大（Class C 一条 ~286MB，Class A 一条 1+ GB），且来自 JVET 官方仓库，每个人自己下。
+Not tracked. They're large (Class C is ~286 MB each, Class A is 1+ GB),
+and they come from the JVET archive — each user downloads them.
 
 ---
 
-## 7. `docs/` — 项目级技术文档
+## 7. `docs/` — project-level technical documentation
 
 ```
 docs/
-└── JM_CTC_alignment.md   ← JM 如何与 CTC 对齐（论文方法学章节的素材）
+└── JM_CTC_alignment.md   ← how JM is aligned with CTC (source material for the paper's methodology section)
 ```
 
-目前只有一份，因为只有 JM 这一块需要特别解释（HM/VTM/ECM 都用各自的官方 CTC，没什么好特别说明的）。
+Currently just one file, because JM is the only encoder that needs special
+explanation (HM/VTM/ECM all use their own official CTC, with nothing
+remarkable to note).
 
-未来如果加更多 docs（比如 `BDrate_method.md`、`Cluster_migration.md`），都放这里。
+Future docs (e.g. `BDrate_method.md`, `Cluster_migration.md`) would live here.
 
 ---
 
-## 8. `tutorial/` — 项目教程
+## 8. `tutorial/` — project tutorials
 
 ```
 tutorial/
-├── README.md                       ← 教程入口
-├── 00_overview.md                  ← 项目大背景
-├── 01_project_structure.md         ← 本文档
-├── 02_jm_config_explained.md       ← JM 配置详解
-└── 03_how_to_run.md                ← 启动教程
+├── README.md                       ← tutorial entry point
+├── 00_overview.md                  ← project overview
+├── 01_project_structure.md         ← this document
+├── 02_jm_config_explained.md       ← JM config explained
+└── 03_how_to_run.md                ← how to run the pilot
 ```
 
-这一组是给人看的、手写的教程，全部入 git。它们与项目代码一同维护，新功能或踩坑笔记应该回填到对应章节里。
+Hand-written human-facing tutorials, all tracked in git. They are
+maintained alongside the code — new features or new pitfalls should be
+backfilled into the relevant tutorial.
 
-## 9. `report/` — 最终结果输出
+---
+
+## 9. `report/` — final output
 
 ```
 report/
-├── pilot_results.md                ← (build_report.py 产出)
-└── figures/                        ← (build_report.py 产出)
+├── pilot_results.md                ← (produced by build_report.py)
+└── figures/                        ← (produced by build_report.py)
     ├── rd_<sequence>_<config>.png
     ├── bdrate_summary.png
     └── time_scaling.png
 ```
 
-这一组由 `make report` 自动生成，每次跑完都会被覆盖。**不要手工编辑这些文件**——下次重跑会丢。如果你想标注解读，新建一份 `report/notes_<date>.md` 旁边放着。
+Auto-generated by `make report` and overwritten on each run. **Don't edit
+these files by hand** — your edits will be lost on the next run. If you
+want to annotate or interpret, create `report/notes_<date>.md` alongside.
 
-通常 `pilot_results.md` 和图建议也 commit 一份当快照，方便不跑代码的人直接看结果。
+That said, it is conventional to commit a snapshot of `pilot_results.md`
+and the figures, so that readers can see the results without rerunning code.
 
 ---
 
-## 10. 运行时产物目录
+## 10. Runtime artefact directories
 
-### `bin/` — 编译产物
+### `bin/` — compiled artefacts
 
 ```
 bin/
@@ -451,62 +549,66 @@ bin/
 └── EncoderApp_ECM         ← ECM
 ```
 
-由 `make build` 产出。完全本地，不入 git。换机器要重新编译。
+Produced by `make build`. Strictly local — not tracked. A new machine has
+to rebuild.
 
-### `runs/` — 每次运行的中间产物
+### `runs/` — per-run intermediate artefacts
 
-每次 `make encode` 会创建一个时间戳目录：
+Each `make encode` creates a timestamped directory:
 
 ```
 runs/
 └── 2026-05-19_1430_pilot/
-    ├── jobs.csv              ← 任务状态与命令记录
-    ├── bitstreams/           ← 编码输出的 .264 / .bin 文件
-    ├── logs/                 ← 每个任务一个 .log
-    └── tmp_configs/          ← (预留，目前未用)
+    ├── jobs.csv              ← task status + commands
+    ├── bitstreams/           ← encoded .264 / .bin files
+    ├── logs/                 ← one .log per task
+    └── tmp_configs/          ← (reserved, unused for now)
 ```
 
-不入 git。可以堆几十 GB。`make clean-runs` 一键清空。
+Not tracked. Can grow to tens of GB. `make clean-runs` clears it all.
 
-### `results/` — 解析后的最终数据
+### `results/` — parsed final data
 
 ```
 results/
-├── raw_metrics.csv          ← 每个任务一行的指标
-├── bdrate_table.csv         ← BD-rate 汇总
-├── time_ratio.csv           ← 时间比汇总
-└── pilot_baseline.csv       ← 基线（首次成功跑完后 stamp）
+├── raw_metrics.csv          ← one row per task
+├── bdrate_table.csv         ← BD-rate summary
+├── time_ratio.csv           ← time-ratio summary
+└── pilot_baseline.csv       ← baseline (stamped on first successful run)
 ```
 
-**入 git**。Pilot baseline 是项目的质量护栏，必须版本化。
+**Tracked in git.** The pilot baseline is the project's quality guardrail
+and must be version-controlled.
 
-### `logs/` — 顶层日志（保留）
+### `logs/` — top-level logs (reserved)
 
-目前未用。预留给以后可能的全局日志（比如 `make encode` 启动横幅、错误汇总等）。
+Currently unused. Reserved for possible future global logs (`make encode`
+launch banners, error roll-ups, etc.).
 
 ---
 
-## 11. 一张图总结
+## 11. The whole picture in one diagram
 
 ```
          ┌─────────────┐
-         │ pilot.yaml  │  ← 你只动这个文件改 scope
+         │ pilot.yaml  │  ← edit this one file to change scope
          └──────┬──────┘
                 │
                 ▼
    ┌────────────────────────────────┐
    │  scripts/run_pilot.py          │
-   │  (读取 configs/ 下所有 cfg)    │
+   │  (reads all cfg files under    │
+   │   configs/)                    │
    └─────────────┬──────────────────┘
-                 │ 调度
+                 │ dispatches
                  ▼
          ┌───────────────┐         ┌────────────────┐
          │  bin/lencod   │         │  sequences/    │
-         │  bin/TAppEnc  │ ◄─读─── │  *.yuv         │
+         │  bin/TAppEnc  │ ◄─read─ │  *.yuv         │
          │  bin/Enc_VTM  │         │  (gitignored)  │
          │  bin/Enc_ECM  │         └────────────────┘
          └──────┬────────┘
-                │ 编码
+                │ encode
                 ▼
    ┌─────────────────────────────────┐
    │  runs/<timestamp>/              │
@@ -518,16 +620,20 @@ results/
                  ▼
          ┌───────────────────┐
          │ parse_logs.py     │
-         │ compute_bdrate.py │  ──► results/*.csv  (入 git)
+         │ compute_bdrate.py │  ──► results/*.csv  (tracked)
          │ build_report.py   │  ──► report/pilot_results.md + figures/
          │ verify_baseline   │
          └───────────────────┘
 ```
 
-每个箭头都是一个 Makefile target：`make encode` → `make parse` → `make bdrate` → `make report` → `make verify-baseline`。
+Each arrow corresponds to a Makefile target: `make encode` → `make parse`
+→ `make bdrate` → `make report` → `make verify-baseline`.
 
-如果你能在这张图上指出"我要改 scope 应该改哪里"、"我要看每次跑出来的具体数字去哪"、"我要复现 baseline 怎么验"——你就掌握了这个项目的全部结构。
+If you can point to "where I would change the scope," "where every per-run
+number ends up," and "how to verify against the baseline" on this diagram,
+you've mastered the project's structure.
 
 ---
 
-下一篇：[02 JM 配置详解](02_jm_config_explained.md) —— 解释为什么 JM 这一档需要单独一篇文档。
+Next: [02 JM config explained](02_jm_config_explained.md) — why JM needs
+its own dedicated document.

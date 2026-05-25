@@ -1,31 +1,36 @@
-# 教程目录
+# Tutorial index
 
-这个目录是项目教程的入口。按以下顺序阅读：
+This directory is the entry point for the project tutorials. Read them in
+order:
 
-| 文件 | 内容 | 适合谁先看 |
+| File | Topic | Best audience |
 |---|---|---|
-| [00_overview.md](00_overview.md) | 项目大背景、论文动机、scope 设计 | 所有人 |
-| [01_project_structure.md](01_project_structure.md) | 每个目录、每个文件做什么用 | 所有人 |
-| [02_jm_config_explained.md](02_jm_config_explained.md) | JM 配置的两层"调整"详解 | 准备写论文方法学章节的人 |
-| [03_how_to_run.md](03_how_to_run.md) | 从零开始把 pilot 跑起来 | 第一次动手的人 |
+| [00_overview.md](00_overview.md) | Project background, paper motivation, scope decisions | Everyone |
+| [01_project_structure.md](01_project_structure.md) | What each directory and each file is for | Everyone |
+| [02_jm_config_explained.md](02_jm_config_explained.md) | The two-layer "tuning" of JM configs, in detail | Anyone writing the paper's methodology section |
+| [03_how_to_run.md](03_how_to_run.md) | Getting the pilot running from scratch | First-time hands-on users |
 
-读完这 4 篇 + 项目根目录的 [README.md](../README.md) + [HANDOFF.md](../HANDOFF.md)，你应该完全掌握这个项目。
+After reading these four files plus the top-level [README.md](../README.md)
+and [HANDOFF.md](../HANDOFF.md), you should fully understand the project.
 
-## 这个目录里还会有什么
+## What else lives in this directory
 
-除了上面 4 篇人工教程，运行 `make report` 后会自动生成：
+In addition to the four tutorials above, running `make report` auto-generates:
 
-- `pilot_results.md` —— 最终结果报告（每次重跑都会被覆盖）
-- `figures/` —— PNG 图表（RD 曲线、BD-rate 汇总、编码时间比）
+- `pilot_results.md` — the final results report (overwritten on every run)
+- `figures/` — PNG charts (RD curves, BD-rate summary, encoding-time scaling)
 
-这些是项目的"产出物"，与教程性质不同。教程文件（00–03）入 git，结果文件在 .gitignore 之外但通常也建议入库一份当快照。
+These are the project's **outputs**, not tutorials. The tutorial files
+(00–03) are tracked in git; the results files are typically checked in as
+snapshots of a known-good baseline.
 
-## 后续可能增加的文档
+## Possible future additions
 
-按需添加：
+To be added as needed:
 
-- `04_extending_to_full_ctc.md` —— 详细说明扩展到完整 CTC 的步骤
-- `05_paper_section_drafts.md` —— 论文章节草稿
-- `06_troubleshooting.md` —— 实际跑过程中遇到的坑汇总
+- `04_extending_to_full_ctc.md` — step-by-step guide for extending to full CTC
+- `05_paper_section_drafts.md` — draft paper sections
+- `06_troubleshooting.md` — collected pitfalls from real runs
 
-如果你在跑或扩展过程中发现教程缺失某些细节，记得回过头来补上。
+If you hit something the tutorials don't cover, please loop back and add it
+here for whoever comes next.

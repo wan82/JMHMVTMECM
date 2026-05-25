@@ -1,180 +1,191 @@
-# 03 — 启动教程
+# 03 — How to Run
 
-> 这一篇按从零开始的顺序，把整个 pilot 从安装到出报告的每一步都走一遍。
-> 假设你刚 clone 完这个项目（或者刚拿到导师拷给你的文件夹），还没装任何东西。
+> This document walks through the entire pilot from zero — every step from
+> installing dependencies to producing the final report.
+> Assume you have just cloned the project (or just received a folder copy
+> from your advisor) and have installed nothing yet.
 
 ---
 
-## 0. 前置条件
+## 0. Prerequisites
 
-机器与软件最低要求：
+Minimum machine and software requirements:
 
-| 项 | 要求 |
+| Item | Requirement |
 |---|---|
-| 操作系统 | macOS 14+（推荐 M 系列 Apple Silicon）或 Linux Ubuntu 22.04+ |
-| 内存 | ≥ 16 GB（Pilot 推荐 36 GB；4K 扩展需要更多） |
-| 磁盘空间 | ≥ 50 GB 可用（YUV 占大头） |
+| OS | macOS 14+ (Apple Silicon recommended) or Linux Ubuntu 22.04+ |
+| RAM | ≥ 16 GB (36 GB recommended for pilot; more needed for 4K) |
+| Disk | ≥ 50 GB free (YUVs dominate) |
 | Python | 3.10+ |
 | CMake | 3.22+ |
-| C++ 编译器 | clang 14+ 或 gcc 11+ |
-| Git | 2.40+（用于 patch apply） |
+| C++ compiler | clang 14+ or gcc 11+ |
+| Git | 2.40+ (used for `git apply` of patches) |
 
-macOS 上 Xcode Command Line Tools 装了就行（`xcode-select --install`），不需要完整 Xcode。Linux 上 `build-essential` + `cmake` + `python3-venv` 即可。
+On macOS, Xcode Command Line Tools are enough (`xcode-select --install`) —
+the full Xcode app is not required. On Linux, `build-essential` + `cmake` +
+`python3-venv` is enough.
 
 ---
 
-## 1. 检查项目位置
+## 1. Verify the project location
 
-确保你在正确目录下：
+Make sure you are in the right directory:
 
 ```bash
 cd /path/to/JM_HM_VTM_ECM/codec-comparison-pilot
 pwd
-# 应该显示上面这个路径
+# Should print the above path
 ```
 
-确认四个编码器源码在兄弟目录：
+Confirm the four encoder source trees are siblings:
 
 ```bash
 ls ..
-# 应该看到：
+# Should show:
 #   ECM-ECM-18.0/
 #   HM-HM-18.0/
 #   JM-JM-19.1/
 #   VVCSoftware_VTM-VTM-23.11/
-#   codec-comparison-pilot/    ← 你在这里
+#   codec-comparison-pilot/    ← you are here
 ```
 
 ---
 
-## 2. Step 1：创建 Python 虚拟环境
+## 2. Step 1: create the Python virtual env
 
 ```bash
 make venv
 ```
 
-这会调 `scripts/setup_env.sh`，做几件事：
+This calls `scripts/setup_env.sh`, which does several things:
 
-- 找到 `python3`（要 ≥ 3.10）
-- 在项目根创建 `.venv/`
-- 装 `requirements.txt` 里的所有依赖
+- Finds `python3` (must be ≥ 3.10)
+- Creates `.venv/` in the project root
+- Installs all dependencies from `requirements.txt`
 
-预计耗时：1–2 分钟。
+Expected time: 1–2 minutes.
 
-完成后激活：
+Activate after creation:
 
 ```bash
 source .venv/bin/activate
 ```
 
-激活后 shell 提示符会带上 `(.venv)` 前缀。验证：
+Your shell prompt should now show a `(.venv)` prefix. Verify:
 
 ```bash
 which python
-# 应该输出 .../codec-comparison-pilot/.venv/bin/python
-python -c "import pandas, matplotlib, yaml, bjontegaard_metric; print('OK')"
-# 应该输出 OK
+# Should print .../codec-comparison-pilot/.venv/bin/python
+python -c "import pandas, matplotlib, yaml, bjontegaard; print('OK')"
+# Should print OK
 ```
 
 ---
 
-## 3. Step 2：编译四个编码器
+## 3. Step 2: build the four encoders
 
-### 3.1 指定源码位置
+### 3.1 Point to the source location
 
-四个编码器源码在 `../`（项目的父目录）。告诉 build 脚本去那里找：
+The four encoder source trees live at `../` (the project's parent
+directory). Tell the build script to look there:
 
 ```bash
 export TOOLS_DIR=$(cd .. && pwd)
 echo "TOOLS_DIR=$TOOLS_DIR"
-# 例如：/path/to/JM_HM_VTM_ECM
+# e.g. /path/to/JM_HM_VTM_ECM
 ```
 
-> 这一行需要在每次新开 shell 时重新执行。如果嫌烦，可以把它加进 `~/.zshrc` 或者写一个 `setup.sh` 在项目根 source。
+> This line has to be re-run in every new shell. If that's annoying, add it
+> to your `~/.zshrc` or create a `setup.sh` in the project root to source.
 
-### 3.2 编译
+### 3.2 Build
 
 ```bash
 make build
 ```
 
-`scripts/build_all.sh` 会顺序编译 JM → HM → VTM → ECM。预计耗时（Mac Studio M4 Max，并行编译）：
+`scripts/build_all.sh` builds JM → HM → VTM → ECM sequentially. Expected
+times (Mac Studio M4 Max, parallel build):
 
-| 编码器 | 编译时间 |
+| Encoder | Build time |
 |---|---|
-| JM | ~1 分钟 |
-| HM | ~3–5 分钟 |
-| VTM | ~5–10 分钟 |
-| ECM | ~10–20 分钟 |
-| **总计** | **~20–35 分钟** |
+| JM | ~1 min |
+| HM | ~3–5 min |
+| VTM | ~5–10 min |
+| ECM | ~10–20 min |
+| **Total** | **~20–35 min** |
 
-如果只想先试一个：
+To build a single encoder for a quick try:
 
 ```bash
-make build-jm    # 或 build-hm / build-vtm / build-ecm
+make build-jm    # or build-hm / build-vtm / build-ecm
 ```
 
-### 3.3 编译验证
+### 3.3 Verify the build
 
-完成后检查：
+After completion:
 
 ```bash
 ls -lh bin/
-# 应该看到：
-#   lencod              (JM, ~1MB)
-#   TAppEncoder         (HM, ~10MB)
-#   EncoderApp_VTM      (~15MB)
-#   EncoderApp_ECM      (~20MB)
+# Should show:
+#   lencod              (JM,  ~1 MB)
+#   TAppEncoder         (HM,  ~10 MB)
+#   EncoderApp_VTM      (~15 MB)
+#   EncoderApp_ECM      (~20 MB)
 ```
 
-每个二进制都跑一下 `--help`（HM/VTM/ECM）或 `-h`（JM）确认能起来：
+Run `--help` on each binary (HM/VTM/ECM) or `-h` (JM) to confirm they start:
 
 ```bash
 ./bin/TAppEncoder --help 2>&1 | head -5
 ./bin/EncoderApp_VTM --help 2>&1 | head -5
 ./bin/EncoderApp_ECM --help 2>&1 | head -5
-./bin/lencod -h 2>&1 | head -5   # JM 用 -h
+./bin/lencod -h 2>&1 | head -5   # JM uses -h
 ```
 
-### 3.4 如果编译失败
+### 3.4 If the build fails
 
-**JM 编不过**：很罕见，JM 代码是纯 C，几乎在任何平台都能编。看报错栈，通常是 `#include` 缺失，装个 `xcode-select --install` 或 Linux 上 `apt install build-essential` 即可。
+**JM won't build**: rare — JM is pure C and builds almost anywhere. Look at
+the error stack; usually it's a missing `#include`. Install
+`xcode-select --install` on macOS or `apt install build-essential` on Linux.
 
-**HM 编不过**：可能是 CMake 版本太老（要 ≥ 3.22）。`brew upgrade cmake` 或 `pip install cmake --upgrade`。
+**HM won't build**: probably CMake too old (need ≥ 3.22). `brew upgrade cmake`
+or `pip install cmake --upgrade`.
 
-**VTM/ECM 在 ARM macOS 上编不过**：最常见的报错是某个文件用了 x86-only 内联汇编。报错栈贴出来。临时绕过：
+**VTM/ECM won't build on ARM macOS**: the most common error is a file using
+x86-only intrinsics or inline assembly. Paste the error stack. Quick fix:
 
 ```bash
-# 找到问题文件，加 #ifdef __x86_64__ 守卫
-# 然后保存成 patch
+# Find the offending file, add #ifdef __x86_64__ guards
+# Then save as a patch
 cd $TOOLS_DIR/ECM-ECM-18.0
 git diff > /path/to/codec-comparison-pilot/tools/patches/ecm_arm_macos.patch
 ```
 
-下次 `make build-ecm` 时脚本会自动 apply 这个 patch。
+The next `make build-ecm` will auto-apply the patch.
 
 ---
 
-## 4. Step 3：准备测试序列
+## 4. Step 3: prepare the test sequences
 
-### 4.1 下载 YUV
+### 4.1 Download the YUVs
 
-Pilot 需要两个序列：
+The pilot needs two sequences:
 
-| 文件名 | 来源 | 大小 |
+| Filename | Source | Size |
 |---|---|---|
-| `BasketballDrill_832x480_50.yuv` | JVET CTC 官方 | ~286 MB |
-| `BlowingBubbles_416x240_50.yuv` | JVET CTC 官方 | ~72 MB |
+| `BasketballDrill_832x480_50.yuv` | JVET CTC | ~286 MB |
+| `BlowingBubbles_416x240_50.yuv` | JVET CTC | ~72 MB |
 
-JVET 官方 FTP（账号 hevc，密码 US88Hula）：
+JVET official FTP (user `hevc`, password `US88Hula`):
 
 ```
 ftp://hevc:US88Hula@ftp.tnt.uni-hannover.de/testsequences/
 ```
 
-也可以从导师组里要——这是最稳定的方式。
+You can also ask the advisor's lab — most reliable.
 
-下载完放到 `sequences/`：
+Place them in `sequences/`:
 
 ```bash
 ls sequences/
@@ -184,9 +195,9 @@ ls sequences/
 # README.md
 ```
 
-### 4.2 验证 MD5
+### 4.2 Verify the MD5
 
-下载完算 MD5：
+After download, compute the MD5:
 
 ```bash
 # macOS
@@ -198,17 +209,19 @@ md5sum sequences/BasketballDrill_832x480_50.yuv
 md5sum sequences/BlowingBubbles_416x240_50.yuv
 ```
 
-把 MD5 填回 `configs/sequences/BasketballDrill.yaml` 和 `BlowingBubbles.yaml` 的 `md5:` 字段。也可以填到 `sequences/MANIFEST.csv` 里。
+Paste the MD5 into the `md5:` field of `configs/sequences/BasketballDrill.yaml`
+and `BlowingBubbles.yaml`. Optionally also update `sequences/MANIFEST.csv`.
 
 ---
 
-## 5. Step 4：Sanity check（必跑）
+## 5. Step 4: sanity check (do not skip)
 
 ```bash
 make sanity
 ```
 
-`scripts/build_sanity_check.py` 会用 BlowingBubbles 16 帧 AI@QP37 对每个编码器跑一次最小编码。预期输出：
+`scripts/build_sanity_check.py` runs the cheapest possible workload (16
+frames of BlowingBubbles AI at QP=37) once per encoder. Expected output:
 
 ```
 === Sanity check: JM ===
@@ -226,233 +239,258 @@ make sanity
 Summary: 4 ok, 0 failed.
 ```
 
-如果**任何一个 FAIL**，**先不要继续**——把错误贴出来排查。常见原因：
+If **any one fails**, **stop and investigate** before going further. Common
+causes:
 
-- 二进制不存在 → 回到 Step 2 检查 build
-- 序列 YUV 不存在 → 回到 Step 3
-- 编码器配置文件找不到 → 检查 `configs/{enc}/` 目录是否完整
-- ECM 跑了几分钟超时 → ECM 启动慢是正常的，但 16 帧 AI 不应该超 5 分钟，可能是 binary 有问题
+- Binary missing → go back to Step 2.
+- YUV missing → go back to Step 3.
+- Encoder config missing → check `configs/{enc}/` is complete.
+- ECM timing out after a few minutes → ECM startup is slow, but 16-frame
+  AI should still finish in under 5 min; otherwise the binary may be
+  broken.
 
 ---
 
-## 6. Step 5：Dry-run 检查任务矩阵
+## 6. Step 5: dry-run the task matrix
 
 ```bash
 make encode-dry
 ```
 
-会打印 **64 个任务的完整命令行**，但不执行。检查几个点：
+This prints the **full command lines for all 64 tasks** without executing
+them. Check that:
 
-1. **总任务数是 64**（4 encoder × 2 sequence × 2 config × 4 QP）
-2. **JM 命令含 `-p QPISlice=`、`-p QPPSlice=`、`-p QPBSlice=` 三个，且数值相同**
-3. **HM/VTM/ECM 命令含 `--QP=` 一个**
-4. **所有命令含 `--IntraPeriod=32`**（50fps 序列）
-5. **路径都是绝对路径**，不会有 Windows 风格 `D:\` 或者相对路径
+1. **Total tasks = 64** (4 encoders × 2 sequences × 2 configs × 4 QPs).
+2. **JM commands contain `-p QPISlice=`, `-p QPPSlice=`, `-p QPBSlice=`,
+   all set to the same value.**
+3. **HM/VTM/ECM commands contain a single `--QP=`.**
+4. **All commands contain `--IntraPeriod=32`** (50-fps sequences).
+5. **Paths are absolute** — no Windows-style `D:\…` or relative paths.
 
-任何异常都说明 cfg 或脚本被改坏了。
+Any anomaly indicates a broken config or script.
 
 ---
 
-## 7. Step 6：跑 Pilot
+## 7. Step 6: run the pilot
 
-### 7.1 启动
+### 7.1 Launch
 
 ```bash
 make encode
 ```
 
-或者直接调脚本（更灵活）：
+Or invoke the script directly (more flexible):
 
 ```bash
 python scripts/run_pilot.py
 ```
 
-启动后会打印：
+After launch, you'll see output like:
 
 ```
 Run directory: runs/2026-05-19_1430_pilot
-Pending: 64 / Total: 64 (parallel=4)
-[1/64] 0001_jm_BlowingBubbles_AI_QP22 -> DONE (elapsed=12.3s)
-[2/64] 0002_jm_BlowingBubbles_AI_QP27 -> DONE (elapsed=10.5s)
+Pending: 64 / Total: 64 (parallel=5)
+[1/64] 0001_jm_BlowingBubbles_AI_QP22 -> DONE (elapsed=2.3s)
+[2/64] 0002_jm_BlowingBubbles_AI_QP27 -> DONE (elapsed=1.9s)
 ...
 ```
 
-### 7.2 预计耗时（M4 Max, 4 路并发）
+### 7.2 Expected wall-clock (M4 Max, 5 parallel)
 
-| 阶段 | 累计时间 |
+| Stage | Cumulative time |
 |---|---|
-| JM 全部 16 任务 | < 30 分钟 |
-| HM 全部 16 任务 | ~3–5 小时 |
-| VTM 全部 16 任务 | ~2–3 天 |
-| ECM 全部 16 任务 | ~5–10 天 |
-| **总计** | **~1–2 周** |
+| JM all 16 tasks | < 30 min |
+| HM all 16 tasks | ~1 hour |
+| VTM all 16 tasks | ~6 hours |
+| ECM all 16 tasks | ~few hours |
+| **Total (pilot)** | **~4–8 hours** |
 
-ECM 是绝对瓶颈。建议工作日下班前启动，让它周末连续跑。
+ECM is the absolute bottleneck. Recommended: start before going to sleep
+and let it run overnight.
 
-### 7.3 可以做的事
+### 7.3 What you can do during the run
 
-**断点续跑**：如果中途断了（断电、kill、机器重启），重新跑 `make encode` 会自动跳过 status=DONE 的任务，从未完成的接着跑。
+**Resume**: if it dies (power, kill, machine restart), `make encode` will
+auto-skip tasks with status=DONE and continue from where it left off.
 
-**监控进度**：另开一个 terminal：
+**Monitor progress**: open another terminal:
 
 ```bash
-# 看任务状态
-cat runs/2026-05-19_*_pilot/jobs.csv | column -t -s, | head -20
+# Task status counts
+awk -F, 'NR>1 {print $6}' runs/$(ls -t runs | head -1)/jobs.csv | sort | uniq -c
 
-# 看最新跑出来的指标
-tail -f runs/2026-05-19_*_pilot/logs/$(ls -t runs/2026-05-19_*_pilot/logs/ | head -1)
+# Live tail of the most recent log
+tail -f runs/$(ls -t runs | head -1)/logs/$(ls -t runs/$(ls -t runs | head -1)/logs/ | head -1)
 ```
 
-**调整并发度**：如果发现 4 路并发让机器太热，临时降到 2：
+**Adjust parallelism**: if 5-way parallel runs the machine too hot, drop
+to 2 temporarily:
 
 ```bash
 python scripts/run_pilot.py --jobs 2
 ```
 
-**改 scope**：编辑 `configs/pilot.yaml`（比如先去掉 ECM 看看其他三档），保存后重新跑。`run_pilot.py` 会重新展开矩阵——**注意会创建新的 runs/<timestamp>/ 目录**，不会污染之前的运行。
+**Change scope**: edit `configs/pilot.yaml` (e.g. drop ECM to first
+validate the other three), save, and rerun. `run_pilot.py` will re-expand
+the matrix — **note that this creates a new `runs/<timestamp>/` directory**
+without polluting earlier runs.
 
-### 7.4 完成判定
+### 7.4 Determining completion
 
-跑完后看：
-
-```bash
-ls runs/2026-05-19_*_pilot/
-# bitstreams/    ← 64 个文件
-# logs/          ← 64 个 .log
-# jobs.csv       ← 所有 status=DONE
-```
-
-`jobs.csv` 里所有行 `status` 都应该是 `DONE`，`exit_code=0`。如果有 `FAILED`：
+After completion:
 
 ```bash
-# 看具体哪些失败
-awk -F, '$6 == "FAILED"' runs/2026-05-19_*_pilot/jobs.csv
+ls runs/$(ls -t runs | head -1)/
+# bitstreams/    ← 64 files
+# logs/          ← 64 .log files
+# jobs.csv       ← all status=DONE
 ```
 
-对失败任务先看 log 排查：
+Every row in `jobs.csv` should be `status=DONE` and `exit_code=0`. If any
+are `FAILED`:
 
 ```bash
-tail -30 runs/2026-05-19_*_pilot/logs/<failed_job_id>.log
+# Find the failed ones
+awk -F, '$6 == "FAILED"' runs/$(ls -t runs | head -1)/jobs.csv
 ```
 
-如果只是个别任务失败（比如某次磁盘满了），删 jobs.csv 里那一行的 status 字段或改成 `PENDING`，重跑 `make encode` 会重试。
+Look at the log for each failure:
+
+```bash
+tail -30 runs/$(ls -t runs | head -1)/logs/<failed_job_id>.log
+```
+
+If only one or two failed (e.g. one-off disk-full), edit jobs.csv to set
+the row's status to `PENDING` (or use a Python one-liner), then rerun
+`make encode` to retry.
 
 ---
 
-## 8. Step 7：解析、计算 BD-rate、出报告
+## 8. Step 7: parse, compute BD-rate, generate report
 
-按顺序跑三个：
+Run in order:
 
 ```bash
-make parse      # 1秒：从 logs 提取指标到 results/raw_metrics.csv
-make bdrate     # 1秒：计算 BD-rate 到 results/bdrate_table.csv
-make report     # 几秒：生成 Markdown 报告 + PNG 图
+make parse      # 1s: extract metrics from logs into results/raw_metrics.csv
+make bdrate     # 1s: compute BD-rate into results/bdrate_table.csv
+make report     # a few seconds: generate Markdown report + PNG figures
 ```
 
-也可以一行：
+Or chain them in one command:
 
 ```bash
 make parse bdrate report
 ```
 
-### 8.1 检查结果
+### 8.1 Inspect the results
 
 ```bash
-# 看原始指标（64 行）
+# Raw per-task metrics (64 rows)
 column -t -s, results/raw_metrics.csv | head -10
 
-# 看 BD-rate 汇总
+# BD-rate summary
 column -t -s, results/bdrate_table.csv
 
-# 看编码时间比
+# Time-ratio summary
 column -t -s, results/time_ratio.csv
 
-# 看最终报告
+# Final report
 cat report/pilot_results.md
 
-# 看图
+# Figures
 open report/figures/   # macOS
-# 或
+# or
 xdg-open report/figures/  # Linux
 ```
 
-### 8.2 sanity check 你的结果
+### 8.2 Sanity-check your numbers
 
-BD-rate 应该落在以下区间（Y 分量，RA 配置）：
+BD-rate should fall in these ranges (Y channel, RA config):
 
-| 对比 | 期望 BD-rate（Y, RA） |
+| Comparison | Expected BD-rate (Y, RA) |
 |---|---|
-| HM-vs-JM | -35% ~ -45% |
-| VTM-vs-HM | -30% ~ -40% |
-| ECM-vs-VTM | -15% ~ -25% |
-| ECM-vs-JM | -75% ~ -85% |
+| HM-vs-JM | -35% to -45% |
+| VTM-vs-HM | -30% to -40% |
+| ECM-vs-VTM | -15% to -25% |
+| ECM-vs-JM | -75% to -85% |
 
-如果数字明显偏离：
+If the numbers are off:
 
-- **绝对值偏小** → JM 是不是被默认 cfg 跑了？检查 `configs/jm/encoder_JM_RA_B_HE.cfg` 是不是 HM-like 版本。
-- **绝对值偏大** → JM 是不是被 max_performance cfg 跑了？或者 IntraPeriod 没对齐？
-- **某代退化（数字正）** → BUG，立刻排查 cfg、IntraPeriod、QP 对齐。
+- **Too small in magnitude** → is JM accidentally running with the default
+  cfg? Check that `configs/jm/encoder_JM_RA_B_HE.cfg` really is the
+  HM-like version.
+- **Too large in magnitude** → is JM running max_performance cfg? Or is
+  IntraPeriod out of alignment?
+- **A generation regresses (positive number)** → BUG, immediately
+  investigate cfg, IntraPeriod, and QP alignment.
 
 ---
 
-## 9. Step 8：固化 baseline
+## 9. Step 8: lock in the baseline
 
-第一次完整跑通且数字合理后：
+After your first successful full run with sane numbers:
 
 ```bash
 make verify-baseline
 ```
 
-首次运行时没有 baseline，脚本会把当前 `results/raw_metrics.csv` 拷贝成 `results/pilot_baseline.csv`，作为基线。
+On the first run there is no baseline, so the script copies your current
+`results/raw_metrics.csv` to `results/pilot_baseline.csv`.
 
-**记得把 baseline 提交进 git**：
+**Remember to commit the baseline to git**:
 
 ```bash
 git add results/pilot_baseline.csv results/bdrate_table.csv results/time_ratio.csv
 git commit -m "pilot v1 baseline: JM-19.1/HM-18.0/VTM-23.11/ECM-18.0 on Class C+D, 64 frames"
 ```
 
-之后任何升级（编码器版本、加序列、加配置），重新跑 → `make verify-baseline` 必须通过（容差 0.05 dB / 1% bitrate），不通过说明引入了回归，必须排查。
+Afterwards, any upgrade (encoder version, added sequence, added config)
+must rerun and pass `make verify-baseline` (tolerance: 0.05 dB / 1%
+bitrate). A failure means a regression was introduced — investigate.
 
 ---
 
-## 10. 常用 Cheatsheet
+## 10. Common cheatsheet
 
 ```bash
-# 完整全套（首次运行）
+# Full first-time run
 make venv
 source .venv/bin/activate
 export TOOLS_DIR=$(cd .. && pwd)
 make build
-# 下载 YUV 到 sequences/
+# Download YUVs into sequences/
 make sanity
-make encode-dry           # 检查矩阵
-make encode               # 实际跑（1-2 周）
+make encode-dry           # inspect the matrix
+make encode               # actual run (4–8 h on M4 Max)
 make parse bdrate report
-make verify-baseline      # stamp baseline
+make verify-baseline      # stamp the baseline
 
-# 日常重跑
+# Routine rerun
 source .venv/bin/activate
-make encode               # 自动跳过 DONE 任务
+make encode               # auto-skips DONE tasks
 make parse bdrate report
 
-# 调试单任务
+# Debug a single task
 python scripts/run_pilot.py --dry-run | grep "jm_BasketballDrill_AI_QP22"
-# 把命令贴出来手动跑
+# Paste the command and run by hand
 
-# 清空重来
-make clean-runs           # 只清 runs/
-make clean                # 清 .venv/bin/runs/results
+# Wipe and redo
+make clean-runs           # only clears runs/
+make clean                # clears .venv/bin/runs/results
 ```
 
 ---
 
-## 11. 接下来
+## 11. Next steps
 
-跑通 pilot 之后建议读：
+After getting the pilot running, recommended reading:
 
-- [HANDOFF.md](../HANDOFF.md) —— 毕业前要怎么把这个项目交出去
-- [docs/JM_CTC_alignment.md](../docs/JM_CTC_alignment.md) —— 论文方法学章节的素材
-- [02 JM 配置详解](02_jm_config_explained.md) —— 如果对 JM 细节还有疑问
+- [HANDOFF.md](../HANDOFF.md) — how to hand the project off before graduation
+- [docs/JM_CTC_alignment.md](../docs/JM_CTC_alignment.md) — methodology
+  material for the paper
+- [02 JM config explained](02_jm_config_explained.md) — if you still have
+  questions about JM specifics
 
-如果跑 pilot 的过程中遇到不在本教程覆盖的问题，记下来加进 [HANDOFF.md](../HANDOFF.md) §6 "已知 Pitfalls" 部分——下一个接手的人会感谢你。
+If you encounter a problem the tutorials don't cover, please add it to
+[HANDOFF.md](../HANDOFF.md) §6 "Known Pitfalls" — the next person will
+thank you.

@@ -1,21 +1,22 @@
-# 编码器源码树
+# Encoder source trees
 
-`scripts/build_all.sh` 会在此目录（或 `$TOOLS_DIR` 环境变量指向的目录）下按名称 glob 查找四个编码器源码树。
+`scripts/build_all.sh` looks for the four encoder source trees under this
+directory (or under whatever `$TOOLS_DIR` points to), matched by name glob.
 
-## 预期目录结构
+## Expected directory layout
 
 ```
 tools/
-├── JM-JM-19.1/                     （或 JM-JM-19.x）
-├── HM-HM-18.0/                     （或 HM-HM-18.x）
-├── VVCSoftware_VTM-VTM-23.11/      （或 VTM-23.x）
-├── ECM-ECM-18.0/                   （或 ECM-ECM-18.x / 17.x）
-└── patches/                        （可选，见下文）
+├── JM-JM-19.1/                     (or JM-JM-19.x)
+├── HM-HM-18.0/                     (or HM-HM-18.x)
+├── VVCSoftware_VTM-VTM-23.11/      (or VTM-23.x)
+├── ECM-ECM-18.0/                   (or ECM-ECM-18.x / 17.x)
+└── patches/                        (optional — see below)
 ```
 
-## 提供源码的两种方式
+## Two ways to provide the source code
 
-### 方式 A — 复制到本目录
+### Option A — copy into this directory
 
 ```bash
 cp -r /path/to/JM-JM-19.1                   tools/
@@ -24,36 +25,40 @@ cp -r /path/to/VVCSoftware_VTM-VTM-23.11    tools/
 cp -r /path/to/ECM-ECM-18.0                 tools/
 ```
 
-### 方式 B — 指向外部目录（推荐）
+### Option B — point to an external directory (recommended)
 
 ```bash
 TOOLS_DIR=/path/to/JM_HM_VTM_ECM make build
 ```
 
-如果你已经把四个源码树放在某个共享目录下，不想重复存放，推荐使用此方式。
-编译脚本会读取 `TOOLS_DIR` 环境变量，转而在该目录下查找源码。
+If you already have the four source trees in a shared location and don't
+want to duplicate them, this is the cleaner option. The build script reads
+`TOOLS_DIR` from the environment and looks for the sources there instead.
 
-## Patch（修复 ARM macOS 兼容性问题）
+## Patches (ARM macOS compatibility fixes)
 
-如果某个编码器在 Apple Silicon 上编译失败，可以把 patch 文件放入
-`tools/patches/<编码器小写>_arm_macos.patch`，例如：
+If an encoder fails to build on Apple Silicon, drop a patch file at
+`tools/patches/<encoder-lowercase>_arm_macos.patch`, e.g.:
 
 - `tools/patches/ecm_arm_macos.patch`
 - `tools/patches/vtm_arm_macos.patch`
 
-编译脚本会在运行 CMake 之前，在对应源码树内自动执行 `git apply`。
-如果 patch 已经被应用过，或上游已合并该修复，脚本会记录日志并继续，不会报错。
+The build script will run `git apply` on the patch inside the corresponding
+source tree before invoking CMake. If the patch has already been applied,
+or upstream has already merged the equivalent fix, the script logs a note
+and continues without erroring out.
 
-## 版本固定
+## Pinned versions
 
-Pilot 基线使用的精确版本：
+The exact versions used for the pilot baseline:
 
-| 编码器 | Tag |
+| Encoder | Tag |
 |---|---|
 | JM  | JM-19.1 |
 | HM  | HM-18.0 |
 | VTM | VTM-23.11 |
 | ECM | ECM-18.0 |
 
-这些版本记录在 `HANDOFF.md` 中。**不要**原地升级——如果需要改变版本，
-请新建一个运行目录，以保证基线对比的有效性。
+These versions are also recorded in `HANDOFF.md`. **Do not** upgrade in
+place — if you need to change a version, treat it as a new baseline run
+to keep cross-encoder comparisons valid.

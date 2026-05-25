@@ -1,7 +1,8 @@
 # codec-comparison-pilot
 
-对 JM (AVC) / HM (HEVC) / VTM (VVC) / ECM (post-VVC) 在一组 JVET CTC 序列上进行横向对比的 pilot 项目。
-设计上支持在 pilot 阶段结束后由团队扩展到完整 CTC。
+A pilot project for cross-generation comparison of JM (AVC) / HM (HEVC) /
+VTM (VVC) / ECM (post-VVC) on a subset of JVET CTC sequences. The design is
+intended to be extended to the full CTC by the team after the pilot phase.
 
 > **License note.** Third-party encoder sources under `tools/` (JM, HM, VTM, ECM)
 > are redistributed under their respective licenses — see each
@@ -9,121 +10,127 @@
 > `disclaimer.txt` file. The pilot scaffolding (scripts, configs, docs in this
 > repo) is original work and may be reused freely for academic purposes.
 
-## 范围（pilot）
+## Scope (pilot)
 
-- 测试序列：**BasketballDrill**（Class C）+ **BlowingBubbles**（Class D）
-- 配置：**AI**（全帧内）+ **RA**（随机接入）
-- QP：22、27、32、37
-- 每次编码帧数：64（覆盖 1 个 AI GOP 和 2 个 RA GOP）
-- 总计：4 个编码器 × 2 个序列 × 2 种配置 × 4 个 QP = **64 次编码**
-- 目标硬件：Mac Studio M4 Max 36 GB
-- 预计耗时：约 1–2 周（ECM 是瓶颈）
+- Test sequences: **BasketballDrill** (Class C) + **BlowingBubbles** (Class D)
+- Configurations: **AI** (All-Intra) + **RA** (Random Access)
+- QPs: 22, 27, 32, 37
+- Frames per task: 64 consecutive frames for RA; 8 sub-sampled frames for AI
+  (JVET CTC convention with TemporalSubsampleRatio = 8)
+- Total: 4 encoders × 2 sequences × 2 configurations × 4 QPs = **64 encodes**
+- Target hardware: Mac Studio M4 Max, 36 GB
+- Expected wall-clock: 4–8 hours on M4 Max (ECM is the bottleneck)
 
-Class B 序列被有意去掉，以保持 pilot 的可控性。
-如需修改范围，见 `configs/pilot.yaml`。
+Class B sequences are intentionally excluded to keep the pilot tractable.
+Edit `configs/pilot.yaml` to change scope.
 
-## 快速开始
+## Quick start
 
 ```bash
-# 1. 创建 Python venv 并安装依赖
+# 1. Create the Python venv and install deps
 make venv
 source .venv/bin/activate
 
-# 2. 指定编码器源码目录（二选一）
-#    (a) 将源码复制到 tools/ — 详见 tools/README.md
-#    (b) 或设置 TOOLS_DIR 环境变量：
-export TOOLS_DIR=/path/to/JM_HM_VTM_ECM   # 改成你机器上四个编码器源码所在的父目录
+# 2. Point to the encoder source trees (one of two ways)
+#    (a) Copy sources into tools/ — see tools/README.md
+#    (b) Or set the TOOLS_DIR environment variable:
+export TOOLS_DIR=/path/to/JM_HM_VTM_ECM   # parent dir holding the four source trees
 
-# 3. 编译全部四个编码器（M4 Max 上约需 10–30 分钟）
+# 3. Build all four encoders (~10–30 min on M4 Max)
 make build
 
-# 4. 将 YUV 文件放入 sequences/ — 详见 sequences/README.md
+# 4. Drop YUV files into sequences/ — see sequences/README.md
 #    (BasketballDrill_832x480_50.yuv, BlowingBubbles_416x240_50.yuv)
 
-# 5. 快速验证（每个编码器跑一次极小编码，约 1 分钟）
+# 5. Sanity check (one tiny encode per encoder, ~1 minute total)
 make sanity
 
-# 6. 打印任务矩阵但不实际执行
+# 6. Print the task matrix without executing it
 make encode-dry
 
-# 7. 正式运行 pilot 编码矩阵
+# 7. Run the pilot encode matrix
 make encode
 
-# 8. 解析日志、计算 BD-rate、生成报告
+# 8. Parse logs, compute BD-rate, build the report
 make parse bdrate report
 ```
 
-## 目录结构
+## Directory layout
 
 ```
 codec-comparison-pilot/
-├── README.md                ← 当前文件
-├── HANDOFF.md               ← 团队交接说明
-├── Makefile                 ← 顶层入口
-├── requirements.txt         ← Python 依赖
-├── .venv/                   ← 由 `make venv` 创建
+├── README.md                ← this file
+├── HANDOFF.md               ← team handoff notes
+├── Makefile                 ← top-level entry point
+├── requirements.txt         ← Python dependencies
+├── .venv/                   ← created by `make venv`
 │
 ├── configs/
-│   ├── pilot.yaml           ← 范围与并发配置
-│   ├── jm/                  ← JM HM-like CTC 配置文件
-│   ├── hm/                  ← HM 官方 CTC 配置文件
-│   ├── vtm/                 ← VTM 官方 CTC 配置文件
-│   ├── ecm/                 ← ECM 官方 CTC 配置文件
-│   └── sequences/           ← 每条序列的 YAML 元数据
+│   ├── pilot.yaml           ← scope and concurrency settings
+│   ├── jm/                  ← JM HM-like CTC configs
+│   ├── hm/                  ← HM official CTC configs
+│   ├── vtm/                 ← VTM official CTC configs
+│   ├── ecm/                 ← ECM official CTC configs
+│   └── sequences/           ← per-sequence YAML metadata
 │
 ├── docs/
-│   └── JM_CTC_alignment.md  ← JM 如何与 CTC 对齐的说明
+│   └── JM_CTC_alignment.md  ← how JM is aligned with CTC methodology
 │
-├── tutorial/                ← 项目教程（00–03 + 入口 README）
-├── scripts/                 ← 编译、运行、解析、BD-rate、报告、验证脚本
-├── tools/                   ← 编码器源码树（入 git；build/ 和 bin/ 已忽略）
-├── sequences/               ← 原始 YUV 文件（已加入 .gitignore，manifest 被追踪）
-├── bin/                     ← 编译好的编码器二进制（已加入 .gitignore）
-├── runs/                    ← 每次运行的日志与码流（已加入 .gitignore）
-├── results/                 ← 解析后的 CSV + 基线（被追踪）
-└── report/                  ← 最终结果报告与图（build_report.py 产出）
+├── tutorial/                ← project tutorials (00–03 + entry README)
+├── scripts/                 ← build / run / parse / BD-rate / report / verify scripts
+├── tools/                   ← encoder source trees (tracked; build/ and bin/ are gitignored)
+├── sequences/               ← raw YUV files (gitignored; manifest is tracked)
+├── bin/                     ← compiled encoder binaries (gitignored)
+├── runs/                    ← per-run logs and bitstreams (gitignored)
+├── results/                 ← parsed CSVs + baseline (tracked)
+└── report/                  ← final report + figures (produced by build_report.py)
 ```
 
-## 固定的编码器版本
+## Pinned encoder versions
 
-| 编码器 | Tag        |
-|--------|------------|
-| JM     | JM-19.1    |
-| HM     | HM-18.0    |
-| VTM    | VTM-23.11  |
-| ECM    | ECM-18.0   |
+| Encoder | Tag        |
+|---------|------------|
+| JM      | JM-19.1    |
+| HM      | HM-18.0    |
+| VTM     | VTM-23.11  |
+| ECM     | ECM-18.0   |
 
-不要原地升级版本；任何版本变更都应视为一次全新运行。
+Do not upgrade in place — any version change should be treated as a fresh
+baseline run.
 
-## 平台支持
+## Platform support
 
-- **macOS** Apple Silicon（首要目标 — Mac Studio M4 Max）
-- **Linux**（Ubuntu 22.04+）— 完全支持，用于团队迁移到集群跑完整 CTC 时
+- **macOS** Apple Silicon (primary target — Mac Studio M4 Max)
+- **Linux** (Ubuntu 22.04+) — fully supported; intended for when the team
+  migrates to a cluster for the full CTC run
 
-编译脚本会自动检测平台并选择合适的并行度。
-ARM macOS 的特殊问题见 `tools/README.md`。
+The build script auto-detects the platform and picks an appropriate
+parallelism level. ARM-macOS-specific gotchas are documented in
+`tools/README.md`.
 
-## 如何扩展范围
+## How to extend the scope
 
-打开 `configs/pilot.yaml`，取消注释所需内容：
+Edit `configs/pilot.yaml` and uncomment the entries you need:
 
 ```yaml
 configs:
   - AI
   - RA
-  - LDB    # 取消注释以支持完整 CTC
-  - LDP    # 取消注释以支持完整 CTC
+  - LDB    # uncomment for full CTC
+  - LDP    # uncomment for full CTC
 
 sequences:
   - BasketballDrill
   - BlowingBubbles
-  - Traffic         # Class A1 — 取消注释以支持完整 CTC
-  - PeopleOnStreet  # Class A2 — 取消注释以支持完整 CTC
+  - Traffic         # Class A1 — uncomment for full CTC
+  - PeopleOnStreet  # Class A2 — uncomment for full CTC
 ```
 
-然后重新运行 `make encode`（会新建一个 `runs/<时间戳>/` 目录）。
+Then rerun `make encode` (a fresh `runs/<timestamp>/` directory will be
+created).
 
-## 更多说明
+## Further reading
 
-- `docs/JM_CTC_alignment.md` — 解释 JM 如何配置以与 HM/VTM/ECM CTC 方法论对齐
-- `HANDOFF.md` — pilot 阶段结束后的团队交接指南
+- `docs/JM_CTC_alignment.md` — explains how JM is configured to align with
+  the HM/VTM/ECM CTC methodology
+- `HANDOFF.md` — handoff guide for the team taking over after the pilot

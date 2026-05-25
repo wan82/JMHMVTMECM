@@ -1,121 +1,148 @@
-# 02 — JM 配置详解
+# 02 — JM Configuration Explained
 
-> JM 是四个编码器里**唯一需要专门解释**的一档。HM / VTM / ECM 都有 JVET 官方 CTC 文档可以直接照搬，但 JM 是 AVC 时代的产物，**没有任何带 JVET 编号的 CTC 文档**与之配套。
+> Of the four encoders, JM is the **only one that needs a dedicated
+> explanation**. HM / VTM / ECM all have JVET-numbered CTC documents to
+> follow as-is, but JM is from the AVC era and has **no JVET-numbered CTC
+> document** of its own.
 >
-> 这一篇说明：JM 的"对齐"是怎么做的、做到哪一层、哪些是 JM 维护者帮我们做好的、哪些是我们运行时注入的。
+> This document explains how JM is "aligned" with the others, at what level,
+> what the JM maintainers did for us, and what we inject at runtime.
 >
-> 这也是论文方法学章节最容易被审稿人攻击的地方——务必读完这一篇。
+> This is also the most likely target for reviewer attack in the paper's
+> methodology section — please read it through.
 
 ---
 
-## 1. 为什么 JM 是个特殊问题
+## 1. Why JM is a special problem
 
-视频编码标准的 CTC（Common Test Conditions）体系是 JVET 在 HEVC 时代（约 2010 年起）才正式建立的。在那之前的 AVC 时代，**只有 ad-hoc 的对比实验配置**，每个研究组用自己习惯的参数，论文之间不可比。
+The JVET CTC (Common Test Conditions) framework was formally established
+during the HEVC era (around 2010). Before that, the AVC era used **ad-hoc
+comparison setups**: every research group used its own parameters, and
+papers were not directly comparable.
 
-到了横向对比四代标准的研究场景，问题就出现了：
+For a four-generation horizontal comparison, this creates a problem:
 
-| 编码器 | 有对应的 JVET CTC 文档吗 |
+| Encoder | Has a corresponding JVET CTC document? |
 |---|---|
-| JM (AVC) | **无**——CTC 体系建立时它已经"过时"了 |
-| HM (HEVC) | 有（JCTVC-L1100 等） |
-| VTM (VVC) | 有（JVET-Y2010 等） |
-| ECM (post-VVC) | 有（最新 JVET 会议输出） |
+| JM (AVC) | **No** — CTC was established after AVC had already "aged out" |
+| HM (HEVC) | Yes (JCTVC-L1100 and successors) |
+| VTM (VVC) | Yes (JVET-Y2010 and successors) |
+| ECM (post-VVC) | Yes (latest JVET meeting outputs) |
 
-**如果直接用 JM 默认的 `cfg/encoder_main.cfg`，会得到一个"AVC 老配置"对比"HEVC/VVC CTC 配置"的非对称比较**——JM 跑出来的数字会比真实潜力差很多，让 HEVC/VVC/post-VVC 的增益虚高。
+**If you naively run JM with `cfg/encoder_main.cfg`, you'll be comparing
+"old AVC defaults" against "HEVC/VVC CTC configs"** — an asymmetric setup
+that makes JM look much weaker than it should, and artificially inflates
+the gains of HEVC/VVC/post-VVC.
 
-## 2. 解决方案：JM 19.x 自带的 HM-like 配置
+## 2. The solution: JM 19.x's bundled HM-like configs
 
-幸运的是，JM 维护者意识到了这个问题。从 JM-15.x 之后，他们在源码 `cfg/` 目录下加入了一个 `HM-like/` 子目录，**专门为对齐 HM CTC 调好了一套配置**：
+Fortunately, the JM maintainers recognised this. From JM-15.x onward, they
+added an `HM-like/` subdirectory under `cfg/` with **configurations specifically
+tuned to align with HM CTC**:
 
 ```
 tools/JM-JM-19.1/cfg/HM-like/
-├── encoder_JM_Intra_HE.cfg     ← 对齐 HM encoder_intra_main.cfg
-├── encoder_JM_RA_B_HE.cfg      ← 对齐 HM encoder_randomaccess_main.cfg
-├── encoder_JM_LB_HE.cfg        ← 对齐 HM encoder_lowdelay_main.cfg (B)
-├── encoder_JM_LP_HE.cfg        ← 对齐 HM encoder_lowdelay_P_main.cfg
+├── encoder_JM_Intra_HE.cfg     ← aligned with HM encoder_intra_main.cfg
+├── encoder_JM_RA_B_HE.cfg      ← aligned with HM encoder_randomaccess_main.cfg
+├── encoder_JM_LB_HE.cfg        ← aligned with HM encoder_lowdelay_main.cfg (B)
+├── encoder_JM_LP_HE.cfg        ← aligned with HM encoder_lowdelay_P_main.cfg
 └── per-sequence_JM/
     ├── BasketballDrill.cfg
     ├── BlowingBubbles.cfg
     ├── Traffic.cfg
-    └── ...                     ← 与 HM cfg/per-sequence/ 一一对应
+    └── ...                     ← one-to-one with HM cfg/per-sequence/
 ```
 
-"HE" = **High Efficiency**，即开启 CABAC、High Profile、RDOQ、multi-pass RD 等全部高质量编码工具。
+"HE" = **High Efficiency** — turning on CABAC, High Profile, RDOQ, multi-pass
+RD, and all the other high-quality coding tools.
 
-本项目的核心做法就是：**把这 4 个 HE 配置文件原样拷到 `configs/jm/`**：
+This project's core approach is to **copy those 4 HE configs verbatim into
+`configs/jm/`**:
 
 ```
 configs/jm/
-├── encoder_JM_Intra_HE.cfg      ← 与 tools/JM-JM-19.1/cfg/HM-like/ 下完全一致
+├── encoder_JM_Intra_HE.cfg      ← byte-identical to tools/JM-JM-19.1/cfg/HM-like/…
 ├── encoder_JM_RA_B_HE.cfg
 ├── encoder_JM_LB_HE.cfg
 └── encoder_JM_LP_HE.cfg
 ```
 
-可以用 diff 验证字节一致：
+You can verify with diff:
 
 ```bash
 diff configs/jm/encoder_JM_RA_B_HE.cfg \
      tools/JM-JM-19.1/cfg/HM-like/encoder_JM_RA_B_HE.cfg
-# 没有任何输出 = 完全一致
+# Empty output = identical
 ```
 
-## 3. HM-like 配置到底改了什么
+## 3. What HM-like actually changed (vs JM defaults)
 
-把 HM-like 配置和 JM 默认的 `cfg/encoder_main.cfg` 对比，关键差异落在 5 个领域。
+Comparing HM-like to JM's default `cfg/encoder_main.cfg`, the key differences
+fall into five areas.
 
-### 3.1 GOP 结构：启用 HM-5.0 风格 RA 参考帧管理
+### 3.1 GOP structure: HM-5.0-style RA reference-frame management
 
-这是**最重要的差异**。HM-like 在 RA 配置里打开了一组 flag，让 JM 的 B-picture 参考管理逻辑与 HM 5.0 起的 hierarchical-B 拓扑对齐：
+This is the **most important difference**. HM-like enables a set of flags in
+the RA config that bring JM's B-picture reference management in line with the
+hierarchical-B topology HM has used since HM 5.0:
 
 ```
-HM50RefStructure       = 1     # 默认 0；这一项是核心开关
-CRA                    = 1     # 默认 0；启用 Clean Random Access 风格
-BLevel0MoreRef         = 1     # 默认 0；底层 B 帧多用参考帧（对齐 HM）
-BIdenticalList         = 1     # 默认 0；底层 B 帧 list 0 = list 1
-ReferenceReorder       = 1     # 配合上面用，按 POC 重排参考帧
-HierarchicalCoding     = 3     # 默认 0；3 = 显式 GOP
+HM50RefStructure       = 1     # default 0; this is the key switch
+CRA                    = 1     # default 0; enable Clean Random Access
+BLevel0MoreRef         = 1     # default 0; base-layer B uses more refs (HM-aligned)
+BIdenticalList         = 1     # default 0; base-layer B has list 0 = list 1
+ReferenceReorder       = 1     # paired with the above; reorder refs by POC
+HierarchicalCoding     = 3     # default 0; 3 = explicit GOP
 ExplicitHierarchyFormat = "B3r1B1r2b0e3b2e3B5r2b4e3b6e3"
-NumberBFrames          = 7     # 默认 0；7 = GOP 大小 8（含 1 个 anchor）
+NumberBFrames          = 7     # default 0; 7 = GOP size 8 (incl. 1 anchor)
 ```
 
-**没有 `HM50RefStructure = 1` 这一项，JM 与 HM 的 GOP 结构完全没法比**。这是 JM 维护者最关键的一笔贡献。
+**Without `HM50RefStructure = 1`, the JM and HM GOP structures are simply
+not comparable.** This is the most critical contribution from the JM
+maintainers.
 
-### 3.2 Profile 与熵编码：High Profile + CABAC + 8×8 变换
-
-```
-ProfileIDC             = 100   # High Profile (FRExt)，对齐 HEVC Main
-SymbolMode             = 1     # CABAC（默认可能是 UVLC）
-Transform8x8Mode       = 1     # 启用 8×8 整型变换（FRExt 工具）
-```
-
-AVC High Profile 是工具集最接近 HEVC Main 的子档——支持 8×8 变换、加权预测、监控量化等。**不能用 Baseline 或 Main Profile**，那会限制 JM 的能力。
-
-### 3.3 RD 优化：高复杂度全开
+### 3.2 Profile and entropy: High Profile + CABAC + 8×8 transform
 
 ```
-RDOptimization         = 1     # High-complexity RDO（最强模式）
-UseRDOQuant            = 1     # RDOQ on（与 HM 一致）
-RDPictureDecision      = 1     # 多 pass RD 决策
-SearchMode             = 3     # EPZS 运动搜索（fast & accurate）
-EarlySkipEnable        = 1     # 早 skip 检测（与 HM 一致）
-SelectiveIntraEnable   = 1     # 选择性 intra 决策
+ProfileIDC             = 100   # High Profile (FRExt), closest to HEVC Main
+SymbolMode             = 1     # CABAC (default might be UVLC)
+Transform8x8Mode       = 1     # enable 8×8 integer transform (FRExt tool)
 ```
 
-这一组对齐了 HM 的"准全开"工具状态。**禁止改成 `encoder_max_performance.cfg`**——那是 JM 关掉 RDOQ 和 multi-pass 的速度优先版本，会让 JM 看上去比真实能力差 1.5–3 dB，对比就不公平了。
+AVC High Profile is the tool subset closest to HEVC Main — it supports
+8×8 transform, weighted prediction, supervised quantisation, etc. **Do not
+use Baseline or Main Profile**, which would handicap JM.
 
-### 3.4 加权预测
+### 3.3 RD optimisation: maximum complexity
 
 ```
-WeightedPrediction       = 1   # P 帧 explicit weighted prediction
-WeightedBiprediction     = 1   # B 帧 weighted bi-prediction
+RDOptimization         = 1     # high-complexity RDO (strongest mode)
+UseRDOQuant            = 1     # RDOQ on (matches HM)
+RDPictureDecision      = 1     # multi-pass RD decision
+SearchMode             = 3     # EPZS motion search (fast and accurate)
+EarlySkipEnable        = 1     # early-skip detection (matches HM)
+SelectiveIntraEnable   = 1     # selective intra decision
+```
+
+This set aligns with HM's "almost everything on" tool state. **Do not switch
+to `encoder_max_performance.cfg`** — that's JM's speed-first version with
+RDOQ and multi-pass off, and it would make JM appear 1.5–3 dB weaker than
+its true capability, making the comparison unfair.
+
+### 3.4 Weighted prediction
+
+```
+WeightedPrediction       = 1   # explicit weighted prediction for P
+WeightedBiprediction     = 1   # weighted bi-prediction for B
 ChromaWeightSupport      = 1
 UseWeightedReferenceME   = 1
 ```
 
-HEVC 默认带加权预测，AVC 也支持但默认关闭。HM-like 把它打开，避免在 fade/cross-dissolve 场景被 HEVC 单方面碾压。
+HEVC has weighted prediction on by default. AVC supports it but defaults to
+off. HM-like turns it on so JM doesn't get steamrolled by HEVC on
+fade/cross-dissolve content.
 
-### 3.5 Lambda 权重：保持 JM 自己 retune 过的值
+### 3.5 Lambda weights: keep JM's own retuned values
 
 ```
 LambdaWeightISlice       = 0.65
@@ -124,25 +151,35 @@ LambdaWeightBSlice       = 0.68
 LambdaWeightRefBSlice    = 0.68
 ```
 
-**注意**：这些 lambda 权重**不等于** HM 的 `α · W_k`。每代标准的 lambda 都是针对自家工具集 retune 过的最优值。JM 用这套权重，HM 用 HM 自己的——**两者数值上不一样，但都让各自跑在自家 RDO 框架下的最优工作点**。
+**Important**: these lambda weights are **not equal to** HM's `α · W_k`.
+Every generation's lambda has been retuned by its own developers for its
+own tool set. JM uses this set; HM uses HM's; **the numbers differ, but
+each encoder is run at the local optimum within its own RDO framework**.
 
-这与你之前问的 "怎么统一 RD-cost" 是同一个问题。再强调一遍：
+This is the same question you asked earlier: "how do we unify the RD-cost?"
+To restate the answer:
 
-> **不要试图统一各编码器的 lambda 公式。要统一的是外部测试协议——序列、QP、IntraPeriod、GOP 结构、帧数——而不是 RDO 内部的代价函数。**
+> **Don't try to unify the lambda formulas across encoders. What gets
+> unified is the external test protocol — sequences, QPs, IntraPeriod,
+> GOP structure, frame counts — not the RDO cost function inside.**
 
-这是 Ohm 2012 IEEE TCSVT 论文的方法学，也是 JM HM-like 配置的设计原则。
+This is the methodology of Ohm 2012 (IEEE TCSVT) and the design principle
+behind JM's HM-like config.
 
 ---
 
-## 4. 运行时 CLI override：第二层"调整"
+## 4. Runtime CLI override: the second layer of "tuning"
 
-光有 HM-like cfg 还不够——里面有些字段是序列特定的（路径、尺寸、帧率），还有些是每次运行要变的（QP、IntraPeriod），不能写死在 cfg 里。
+The HM-like cfg alone isn't enough — some fields are sequence-specific
+(paths, dimensions, frame rate), and others change per run (QP, IntraPeriod).
+None of these should be hard-coded in the cfg.
 
-`scripts/run_pilot.py` 的 `build_cmd_jm` 函数负责在运行时通过 JM 的 `-p key=value` CLI 机制注入这些参数。
+`scripts/run_pilot.py`'s `build_cmd_jm` function injects these at runtime
+using JM's `-p key=value` CLI mechanism.
 
-### 4.1 实际生成的命令长什么样
+### 4.1 What an actual command looks like
 
-例：跑 BasketballDrill RA QP=32：
+E.g. running BasketballDrill RA at QP=32:
 
 ```bash
 bin/lencod \
@@ -169,126 +206,164 @@ bin/lencod \
     > runs/2026-05-19_1430_pilot/logs/0017_jm_BasketballDrill_RA_QP32.log 2>&1
 ```
 
-### 4.2 每个 override 字段的来源
+### 4.2 Source of each override
 
-| 字段 | 来源 | 备注 |
+| Field | Source | Notes |
 |---|---|---|
-| `InputFile` | `configs/sequences/BasketballDrill.yaml` + `sequences/` 路径 | cfg 里默认是 Windows 路径 `D:\origCfP\...`，必须覆盖 |
-| `OutputFile` | `runs/<timestamp>/bitstreams/<job_id>.264` | 自动生成，job_id 唯一标识 |
-| `ReconFile=` | 空字符串 | **关掉重建 YUV**——磁盘节省，pilot 不需要 |
+| `InputFile` | `configs/sequences/BasketballDrill.yaml` + `sequences/` path | The cfg's default is a Windows path `D:\origCfP\...` — must be overridden |
+| `OutputFile` | `runs/<timestamp>/bitstreams/<job_id>.264` | Auto-generated; job_id is unique |
+| `ReconFile=` | Empty string | **Disables recon YUV** — saves disk; pilot doesn't need it |
 | `SourceWidth/Height` | sequence YAML | 832, 480 |
-| `OutputWidth/Height` | sequence YAML | **JM 要求两组都填**（HM/VTM/ECM 只要 SourceWidth） |
+| `OutputWidth/Height` | sequence YAML | **JM requires both pairs** (HM/VTM/ECM only need SourceWidth) |
 | `FrameRate` | sequence YAML | 50 fps |
-| `FramesToBeEncoded` | `configs/pilot.yaml` | Pilot=64（1–2 GOP） |
-| `FrameSkip` | 固定 0 | CTC 从第 0 帧开始 |
-| `SourceBitDepth*` | sequence YAML | 都是 8（pilot 全 8-bit） |
-| `OutputBitDepth*` | sequence YAML | 同上 |
-| `QPISlice/PSlice/BSlice` | `configs/pilot.yaml` 的 `qps` 列表 | **三个都设成同一个 QP**（CTC 约定） |
-| `IntraPeriod` | `ctc_intra_period(fps)` | 50fps→32, 60fps→64 |
-| `IDRPeriod` | 同 IntraPeriod | RA 配置下与 IntraPeriod 一致 |
+| `FramesToBeEncoded` | `configs/pilot.yaml` | Pilot=64 (1–2 GOPs) |
+| `FrameSkip` | Fixed at 0 | CTC starts from frame 0 |
+| `SourceBitDepth*` | sequence YAML | All 8 (pilot is all 8-bit) |
+| `OutputBitDepth*` | sequence YAML | Same |
+| `QPISlice/PSlice/BSlice` | `configs/pilot.yaml`'s `qps` list | **All three set to the same QP** (CTC convention) |
+| `IntraPeriod` | `ctc_intra_period(fps)` | 50fps → 32, 60fps → 64 |
+| `IDRPeriod` | Same as IntraPeriod | Equal to IntraPeriod in RA |
 
-### 4.3 几个细节要注意
+### 4.3 A few subtleties
 
 **`QPISlice = QPPSlice = QPBSlice`**
 
-JM 默认 cfg 里给的是 `QPISlice=32, QPPSlice=33`——P 帧故意比 I 帧 QP 高 1。**不要**保留这个 cascade。HM-like cfg 里的 `LambdaWeight*`、`BRefPicQPOffset` 和 hierarchical-B 结构内部已经做了 QP cascading，外部传一个 QP 即可。所有四个编码器（JM/HM/VTM/ECM）都按这个约定走，才能公平对比。
+JM's default cfg uses `QPISlice=32, QPPSlice=33` — P is intentionally 1 QP
+above I. **Do not preserve this cascade.** HM-like's `LambdaWeight*`,
+`BRefPicQPOffset`, and the hierarchical-B structure already handle QP
+cascading internally — passing one QP from outside is the right approach.
+All four encoders (JM/HM/VTM/ECM) follow this convention so that the
+comparison stays fair.
 
-**`IntraPeriod` 全编码器对齐**
+**`IntraPeriod` aligned across encoders**
 
-CTC 规定每种帧率对应一个 IntraPeriod：50/30 fps → 32，60 fps → 64。`run_pilot.py` 的 `ctc_intra_period(fps)` 函数集中处理这个映射。**所有四个编码器用同一个 IntraPeriod 值**——这是公平对比的硬约束。
+CTC specifies an IntraPeriod per frame rate: 50/30 fps → 32, 60 fps → 64.
+`run_pilot.py`'s `ctc_intra_period(fps)` function centralises this mapping.
+**All four encoders use the same IntraPeriod value** — this is a hard
+constraint for fair comparison.
 
-**AI 配置下强制 IntraPeriod=1**
+**Force IntraPeriod=1 for AI**
 
-AI = All Intra = 每帧都是 I 帧。HM-like 的 `encoder_JM_Intra_HE.cfg` 默认就是 1，但 `run_pilot.py` 又显式覆盖了一次，防止从 RA cfg 切过来时漏掉。
+AI = All Intra = every frame is an I-frame. HM-like's
+`encoder_JM_Intra_HE.cfg` defaults to 1, but `run_pilot.py` still
+explicitly overrides it to guard against accidentally inheriting the RA
+value if cfg files are ever combined.
 
-**`ReconFile=` 空字符串**
+**`ReconFile=` empty string**
 
-JM 默认会输出一份重建 YUV，对 832×480 64 帧的序列大概 30 MB。64 个任务全开就是 ~2GB——pilot 不需要重建 YUV（PSNR 在编码器内部已经算好），关掉省磁盘和 IO 时间。
+JM by default outputs a reconstructed YUV — for 832×480 × 64 frames, that's
+~30 MB. Across 64 tasks, ~2 GB of reconstructed YUVs. The pilot doesn't
+need them (PSNR is computed inside the encoder), so turning them off saves
+disk and I/O time.
 
-**`OutputWidth/Height` 必填**
+**`OutputWidth/Height` must be set**
 
-HM/VTM/ECM 只需要 SourceWidth/SourceHeight，但 JM 的 `lencod` 还需要 OutputWidth/OutputHeight（用于支持 source resize，虽然我们没用这个功能）。如果只设 SourceWidth，JM 会用默认值 176x144 输出，编码结果就错了。**这是一个静默 bug 陷阱**。
+HM/VTM/ECM only need SourceWidth/SourceHeight, but JM's `lencod` also
+requires OutputWidth/OutputHeight (to support source resize, which we don't
+use). Setting only SourceWidth would silently produce 176×144 output —
+**a quiet bug trap**.
 
 ---
 
-## 5. 我"调整"了什么——精确版本
+## 5. What we "tuned" — the precise version
 
-到此你应该清楚：我没有改任何 JM 的 .cfg 文件。"调整"分成两层：
+You should now see that we didn't modify any JM .cfg file. "Tuning" happens
+in two layers:
 
-### 第一层：选用 JM 自带的 HM-like 配置而不是默认配置
+### Layer 1: choose HM-like rather than the default config
 
-| 我们选 | 我们不选 |
+| We chose | We rejected |
 |---|---|
-| `cfg/HM-like/encoder_JM_RA_B_HE.cfg` | `cfg/encoder_main.cfg`（默认） |
+| `cfg/HM-like/encoder_JM_RA_B_HE.cfg` | `cfg/encoder_main.cfg` (default) |
 | `cfg/HM-like/encoder_JM_Intra_HE.cfg` | `cfg/encoder_baseline.cfg` |
-| `cfg/HM-like/encoder_JM_LB_HE.cfg` | `cfg/encoder_max_performance.cfg`（速度优先） |
+| `cfg/HM-like/encoder_JM_LB_HE.cfg` | `cfg/encoder_max_performance.cfg` (speed-first) |
 | `cfg/HM-like/encoder_JM_LP_HE.cfg` | `cfg/encoder_extended.cfg` |
 
-这一层"选择"本身就是一个决定——HM-like 是 JM 维护者为横向对比做好的对齐版本。
+This selection itself is a decision — HM-like is the JM maintainers'
+horizontal-comparison-aligned version.
 
-### 第二层：运行时通过 CLI 注入 per-run 参数
+### Layer 2: inject per-run parameters via the CLI at runtime
 
-把 HM-like cfg 里写死的路径、QP、帧数、IntraPeriod 在每次运行时覆盖掉。这一层的逻辑完全集中在 `scripts/run_pilot.py` 的 `build_cmd_jm` 函数里，约 30 行代码。**有变更，git diff 一眼就能看到**。
+Override the hard-coded paths, QPs, frame counts, IntraPeriod in HM-like cfg
+on each run. All of this logic lives in `scripts/run_pilot.py`'s
+`build_cmd_jm` function — about 30 lines of code. **Any change shows up
+immediately in `git diff`.**
 
 ---
 
-## 6. 验证 JM 跑得"对不对"
+## 6. AI subsampling: a third layer for JM only
 
-跑通 sanity check 之后，用一次手动 dry-run 来验证生成的命令是合理的：
+JM has no `TemporalSubsampleRatio` option. To follow JVET CTC for AI (which
+samples every 8th frame; see §6.7 in HANDOFF.md), we pre-decimate the source
+YUV into a 8-frame file `<Name>_AI_TSR8.yuv` containing frames
+0, 8, 16, 24, 32, 40, 48, 56 of the original. JM reads this file directly.
+
+To keep the kbps units consistent across all four encoders (HM/VTM/ECM
+internally divide by `fps/TSR` after subsampling), JM is told
+`FrameRate = source_fps / TSR` (= 6.25 for 50-fps content). `build_cmd_jm`
+handles this — see the AI branch.
+
+The pre-decimation script is `scripts/extract_ai_subsample.py`, and it runs
+automatically as a dependency of `make encode`.
+
+---
+
+## 7. Verifying that JM is running correctly
+
+After passing sanity check, do a manual dry-run to verify the command is
+well-formed:
 
 ```bash
 make encode-dry | grep -A1 "jm_BasketballDrill_RA_QP32"
 ```
 
-应该看到类似上面 §4.1 的命令。检查几个点：
+You should see something like §4.1 above. Check that:
 
-1. `-d` 指向 `configs/jm/encoder_JM_RA_B_HE.cfg` （不是默认 main 或 baseline）
-2. `-p` 列表里有 `QPISlice/PSlice/BSlice` 三个，且数值都是 32
-3. `IntraPeriod` 是 32（50fps），不是 0 或 16
-4. `ReconFile=` 是空（关掉重建）
+1. `-d` points to `configs/jm/encoder_JM_RA_B_HE.cfg` (not main or baseline).
+2. The `-p` list includes `QPISlice/PSlice/BSlice`, all set to 32.
+3. `IntraPeriod` is 32 (50fps), not 0 or 16.
+4. `ReconFile=` is empty (reconstruction disabled).
 
-然后跑一次：
+Then for actual JM results on BasketballDrill RA QP=32 (64 frames),
+you should see roughly:
 
-```bash
-python scripts/run_pilot.py --jobs 1 --dry-run | head -50
-```
-
-如果一切正常，跑出来的 JM 结果应该符合：
-
-| 指标 | 期望区间（BasketballDrill, RA, QP=32, 64 帧） |
+| Metric | Expected range |
 |---|---|
 | Bitrate | 800–1500 kbps |
 | Y-PSNR | 34–37 dB |
-| 相对 HM | HM 节省 ~35–45% 码率 |
+| Relative to HM | HM saves ~35–45% bitrate |
 
-如果 JM 跑出来**比 HM 还省码率**或 Y-PSNR 更高——**不正常**，立刻排查：
+If JM **saves more bits than HM** or has higher Y-PSNR — that's **wrong**,
+investigate immediately:
 
-1. JM 的 cfg 是不是被替换或修改了？
-2. JM 的 `HM50RefStructure` 是不是 1？
-3. JM 与 HM 的 `IntraPeriod` 是不是一致？
-4. JM 的 QP 是不是真的传进去了？
+1. Has the JM cfg been replaced or modified?
+2. Is JM's `HM50RefStructure = 1`?
+3. Is JM's `IntraPeriod` the same as HM's?
+4. Is the JM QP value really being passed in?
 
 ---
 
-## 7. 扩展场景
+## 8. Extension scenarios
 
-### 7.1 切到 10-bit 序列（NebutaFestival、SteamLocomotiveTrain）
+### 8.1 Switching to 10-bit sequences (NebutaFestival, SteamLocomotiveTrain)
 
-未来扩展 Class A 时会遇到 10-bit 序列。需要：
+Future Class A extension will include 10-bit sequences. Required changes:
 
-- HM/VTM/ECM：换 `encoder_*_main10.cfg`（HM）/ VTM/ECM 默认就是 10-bit profile
-- JM：在 `build_cmd_jm` 中根据 `seq['bit_depth']` 添加 override：
+- HM/VTM/ECM: switch to `encoder_*_main10.cfg` (HM); VTM/ECM default to
+  10-bit profile already.
+- JM: in `build_cmd_jm`, add an override based on `seq['bit_depth']`:
 
 ```python
 if seq['bit_depth'] == 10:
     overrides.append("ProfileIDC=110")    # High 10 Profile
 ```
 
-`InternalBitDepth=10` 在 HM-like cfg 里已经是默认值，不用改。
+`InternalBitDepth=10` is already the default in HM-like cfg, so no change
+needed there.
 
-### 7.2 启用 LDB / LDP 配置
+### 8.2 Enabling LDB / LDP
 
-在 `configs/pilot.yaml` 中取消注释：
+In `configs/pilot.yaml`, uncomment:
 
 ```yaml
 configs:
@@ -298,13 +373,16 @@ configs:
   - LDP
 ```
 
-`run_pilot.py` 的 `CONFIG_MAP` 已经把 LDB/LDP 映射到了 `encoder_JM_LB_HE.cfg` / `encoder_JM_LP_HE.cfg`，**不需要改代码**。
+`run_pilot.py`'s `CONFIG_MAP` already maps LDB/LDP to `encoder_JM_LB_HE.cfg`
+and `encoder_JM_LP_HE.cfg` — **no code changes required**.
 
-### 7.3 IntraPeriod 按 CTC 表精确取
+### 8.3 Per-CTC-spec IntraPeriod
 
-当前 `ctc_intra_period(fps)` 只区分两档（≥55fps → 64，否则 → 32）。如果未来扩展到 24/25 fps 序列，按 CTC 正式表：
+The current `ctc_intra_period(fps)` only distinguishes two cases
+(≥55 fps → 64, otherwise → 32). For future sequences at 24/25 fps, follow
+the official CTC table:
 
-| 帧率 | IntraPeriod |
+| Frame rate | IntraPeriod |
 |---|---|
 | 24 fps | 32 |
 | 25 fps | 32 |
@@ -313,18 +391,22 @@ configs:
 | 60 fps | 64 |
 | 100 fps | 96 |
 
-可以扩 `ctc_intra_period()` 函数。
+You can extend `ctc_intra_period()` accordingly.
 
 ---
 
-## 8. 引用
+## 9. References
 
-- `tools/JM-JM-19.1/CHANGES.TXT` —— JM 19.x 系列改动记录
-- `tools/JM-JM-19.1/cfg/HM-like/` —— 上游 HM-like 配置目录
-- `docs/JM_CTC_alignment.md` —— 项目内部的方法学文档（即将成为论文 Section）
-- Ohm, Sullivan, Schwarz, Tan, Wiegand, *Comparison of the Coding Efficiency of Video Coding Standards—Including HEVC*, IEEE TCSVT, 2012 —— 横向对比方法学基准
-- JCT-VC, *Common Test Conditions and Software Reference Configurations*, JCTVC-L1100 —— HM CTC 文档（JM HM-like 的对齐目标）
+- `tools/JM-JM-19.1/CHANGES.TXT` — JM 19.x changelog
+- `tools/JM-JM-19.1/cfg/HM-like/` — upstream HM-like config directory
+- `docs/JM_CTC_alignment.md` — the in-project methodology document
+  (soon to become a paper section)
+- Ohm, Sullivan, Schwarz, Tan, Wiegand, *Comparison of the Coding
+  Efficiency of Video Coding Standards — Including HEVC*, IEEE TCSVT,
+  2012 — the methodological baseline for horizontal comparison
+- JCT-VC, *Common Test Conditions and Software Reference Configurations*,
+  JCTVC-L1100 — the HM CTC document that HM-like targets
 
 ---
 
-下一篇：[03 启动教程](03_how_to_run.md) —— 从零开始把这个项目跑起来。
+Next: [03 How to run](03_how_to_run.md) — running the project from scratch.
