@@ -41,6 +41,49 @@ RE_HM_SUMMARY = re.compile(
 )
 RE_HM_TIME = re.compile(r"Total Time:\s*([\d.]+)\s*sec\.", re.IGNORECASE)
 
+# --- Head-frames fallback (VTM/ECM only) ---
+# In head-frames mode (`make encode N`) the patched VTM/ECM encoder codes just
+# N pictures in coding order and exit(0)s BEFORE printing the SUMMARY block, so
+# RE_HM_SUMMARY finds nothing. We then aggregate the per-picture lines instead:
+#   POC   32 LId:  0 TId: 0 ( CRA, I-SLICE, QP 19 )   516024 bits [Y 43.82 dB  U 45.83 dB  V 46.99 dB] [ET 55 ] ...
+# This fallback only fires when the normal summary is absent, so full runs (and
+# JM/HM, which always print their summary) are completely unaffected.
+RE_HM_PERFRAME = re.compile(
+    r"^POC\s+\d+\s+LId:.*?\)\s+(\d+)\s+bits\s+"
+    r"\[Y\s+([\d.]+)\s+dB\s+U\s+([\d.]+)\s+dB\s+V\s+([\d.]+)\s+dB\]"
+    r"(?:[^\n]*?\[ET\s+([\d.]+))?",
+    re.MULTILINE)
+# FrameRate is echoed on the "# CMD:" line written by run_pilot.py, e.g.
+# "--FrameRate=50". Needed to convert bits/picture into kbps consistently.
+RE_CMD_FRAMERATE = re.compile(r"--FrameRate=([\d.]+)")
+
+
+def parse_hm_like_perframe(text: str) -> dict | None:
+    matches = RE_HM_PERFRAME.findall(text)
+    if not matches:
+        return None
+    n = len(matches)
+    total_bits = sum(int(m[0]) for m in matches)
+    y = sum(float(m[1]) for m in matches) / n
+    u = sum(float(m[2]) for m in matches) / n
+    v = sum(float(m[3]) for m in matches) / n
+    ets = [float(m[4]) for m in matches if m[4]]
+    enc_time = sum(ets) if ets else float("nan")
+    fps_m = RE_CMD_FRAMERATE.search(text)
+    fps = float(fps_m.group(1)) if fps_m else float("nan")
+    # Encoder kbps convention: avg bits/picture * picture-rate. For head-frames
+    # this is a diagnostic figure (the N pictures are a non-contiguous coding
+    # -order diagonal), not a CTC-comparable bitrate.
+    bitrate_kbps = ((total_bits / n) * fps / 1000.0) if fps == fps else float("nan")
+    return {
+        "frames_encoded": n,
+        "bitrate_kbps": bitrate_kbps,
+        "psnr_y_db": y,
+        "psnr_u_db": u,
+        "psnr_v_db": v,
+        "enc_time_sec": enc_time,
+    }
+
 
 # --- JM log patterns ---
 # JM 19 prints, in the "Average data all frames" trailer:
@@ -82,7 +125,9 @@ def parse_jm_time(s: str) -> float:
 def parse_hm_like(text: str) -> dict | None:
     m = RE_HM_SUMMARY.search(text)
     if not m:
-        return None
+        # No SUMMARY block: likely a head-frames (`make encode N`) VTM/ECM log
+        # that exited early. Aggregate the per-picture lines instead.
+        return parse_hm_like_perframe(text)
     frames = int(m.group(1))
     bitrate_kbps = float(m.group(2))
     y = float(m.group(3))

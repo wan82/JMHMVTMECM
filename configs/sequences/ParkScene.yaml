@@ -1,0 +1,13 @@
+# Sequence metadata for ParkScene (Class B, 1080p)
+name: ParkScene
+class: B
+width: 1920
+height: 1080
+fps: 24
+bit_depth: 8
+chroma_format: 420
+total_frames: 240
+level: "4"
+yuv_filename: /Users/w/wan_data/yuv/ParkScene_1920x1080_24.yuv
+md5: ""
+source_url: ""

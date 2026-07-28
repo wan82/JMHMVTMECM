@@ -41,6 +41,9 @@
 
 #include "EncLib.h"
 #include "EncGOP.h"
+#include <cstdio>   // codec-comparison-pilot: fflush/stdout for head-frames hook
+#include <cstdlib>  // codec-comparison-pilot: getenv/atoi/exit for head-frames hook
+
 #include "Analyze.h"
 #include "libmd5/MD5.h"
 #include "CommonLib/SEI.h"
@@ -2553,6 +2556,33 @@ void EncGOP::compressGOP(int pocLast, int numPicRcvd, PicList &rcListPic, std::l
   AccessUnit::iterator  itLocationToPushSliceHeaderNALU; // used to store location where NALU containing slice header is to be inserted
   Picture* scaledRefPic[MAX_NUM_REF] = {};
 
+  // === codec-comparison-pilot: head-frames early stop =====================
+  // Encode only the first N pictures in CODING order, then flush the logs and
+  // exit(0). For a GOP-32 RA hierarchy N=7 yields POC {0,32,16,8,4,2,1} — one
+  // representative frame per temporal layer (plus the two anchors). Controlled
+  // by the env var PILOT_MAX_CODED_PICS: unset or <=0 keeps the normal full
+  // encode. compressGOP() codes exactly one picture per call in this VTM/ECM
+  // version, so a static counter here counts coded pictures in coding order.
+  {
+    static int s_pilotLimit = -1;   // -1 = not yet read from environment
+    static int s_pilotCoded = 0;
+    if (s_pilotLimit == -1)
+    {
+      const char *pilotEnv = getenv("PILOT_MAX_CODED_PICS");
+      s_pilotLimit = (pilotEnv && *pilotEnv) ? atoi(pilotEnv) : 0;
+    }
+    if (s_pilotLimit > 0)
+    {
+      if (s_pilotCoded >= s_pilotLimit)
+      {
+        fflush(stdout);
+        fflush(stderr);
+        exit(EXIT_SUCCESS);
+      }
+      s_pilotCoded++;
+    }
+  }
+  // === end codec-comparison-pilot hook ===================================
   xInitGOP(pocLast, numPicRcvd, isField, isEncodeLtRef);
 
   m_numPicsCoded = 0;

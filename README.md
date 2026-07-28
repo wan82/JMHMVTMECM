@@ -55,6 +55,138 @@ make encode
 make parse bdrate report
 ```
 
+## Fast mode: `make encode N` (RA head-frames)
+
+For quick iteration and smoke tests, `make encode N` runs a Random-Access
+encode but stops the two expensive VVC-family encoders after the first **N
+pictures in coding order**, then exits cleanly:
+
+```bash
+make encode 7          # VTM/ECM code only POC 0,32,16,8,4,2,1, then stop
+```
+
+For a GOP-32 RA hierarchy, `N=7` yields POC **{0, 32, 16, 8, 4, 2, 1}** — the
+intra frame plus exactly one picture per temporal layer (TID 0–5). This
+exercises the full GOP depth at a tiny fraction of the cost (ECM alone is ~99×
+JM, so capping it at 7 pictures is the whole point).
+
+Division of labour in this mode:
+
+| Encoder  | Behaviour                                                    |
+|----------|--------------------------------------------------------------|
+| JM, HM   | **Full** RA encode with their own native GOP (they're cheap) |
+| VTM, ECM | Stop after the first **N** coded pictures (POC 0,32,16,8,4,2,1) |
+
+How it works: the VTM/ECM `EncGOP.cpp` carries a small early-stop hook (see
+`tools/patches/{vtm,ecm}_head_frames.patch`) that reads the env var
+`PILOT_MAX_CODED_PICS`; `run_pilot.py` sets it only for the VTM/ECM jobs. The
+encoder reads enough input frames for the GOP-32 anchor (POC 32) to exist, then
+`exit(0)`s after the N-th coded picture with the per-frame log flushed, so
+`make parse` still works (`parse_logs.py` aggregates the per-picture lines when
+the truncated log has no SUMMARY block).
+
+Optional overrides (any combination):
+
+```bash
+make encode 7 QP=32                                 # single QP instead of 22/27/32/37
+make encode 7 SEQ=BasketballDrill YUV=/data/x.yuv   # custom input for a sequence
+make encode 7 W=1920 H=1080 FPS=60 BD=10            # custom geometry / bit depth
+make encode 7 ENC=vtm,ecm                           # only the two capped encoders
+make encode-dry 7                                   # preview commands + env, no run
+```
+
+> **Note.** The N pictures are a non-contiguous coding-order *diagonal*, so a
+> BD-rate computed from a head-frames run is a diagnostic figure, **not** a
+> CTC-comparable number. Use this mode for build/pipeline smoke tests and quick
+> VTM↔ECM checks, not for reported results. Requires a one-time rebuild of the
+> two encoders to activate the hook: `make build-vtm build-ecm`.
+
+## Encoder source patches (`tools/patches/`)
+
+Functional patches applied to the encoder sources at build time by
+`scripts/build_all.sh`. The working-tree sources already carry the changes, so a
+plain `make build-vtm build-ecm` is enough; the `.patch` files are kept for
+review and for re-applying to a pristine re-checkout.
+
+**`{vtm,ecm}_head_frames.patch`** — the head-frames early-stop hook in
+`EncGOP.cpp` (env var `PILOT_MAX_CODED_PICS`) used by `make encode N` and
+`make fastTestTop7` (see "Fast mode" above).
+
+**`ecm_ccsao_4k.patch`** — raises `MAX_CCSAO_CTU_NUM` from **256 to 4096** in
+ECM's `CommonLib/CommonDef.h`. **Without it, ECM aborts at initialisation on any
+4K sequence (Class A1/A2)** — it fails in ~0.1 s, before coding a single frame,
+with:
+
+```
+ERROR: In function "create" in .../SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range
+```
+
+Cause: ECM-18.0's CCSAO "reuse CTU" tool (`JVET_AL0142_CCSAO_REUSE_CTU`) stores
+per-CTU control in a fixed-size array `uint8_t ccSaoControl[MAX_CCSAO_CTU_NUM]`,
+and the cap was set for ~2K (256 CTUs). A 3840×2160 picture at CTU 128 is
+30×17 = **510** CTUs, which overflows it. 4096 covers 4K at CTU128 (510) and even
+CTU64 (2040) with headroom; the array lives only in the ~48-entry
+`g_ccSaoPrvParam` history (3 components × ≤16 kept params), so the extra memory
+is negligible, and CCSAO stays enabled — ECM's tool set is unchanged, and results
+for sub-4K sequences (≤256 CTUs) are bit-identical before and after the patch.
+VTM has no such tool and needs no patch. **Any 4K ECM run requires a one-time
+`make build-ecm` after this patch.**
+
+### Known ECM runtime bug: `GeoBlendIntra` assertion (workaround, not a patch)
+
+On certain **QP × content** combinations, ECM aborts *mid-encode* (exit code 1,
+after coding some frames) with:
+
+```
+ERROR: In function "motionCompensationGeoBlend" in .../InterPrediction.cpp: should be intra and inter
+```
+
+`getGeoBlendIntraCand()` occasionally returns a geometric-partition candidate
+whose two parts are both intra or both inter, violating the one-intra-one-inter
+invariant the blend mode requires; the following `CHECK` then throws. It is
+content/QP-dependent and sporadic — e.g. in the pilot only **RollerCoaster2
+QP27** hit it, while QP22/32/37 of the same 4K sequence coded fine.
+
+Notes for whoever hits this:
+
+- **A plain retry will not help** — ECM is deterministic (`NumSplitThreads:1`),
+  so it re-crashes at the same frame.
+- **Do not delete the `CHECK`** — proceeding with the inconsistent candidate
+  produces a corrupt / non-conforming bitstream. The assertion is protecting
+  encoder–decoder consistency.
+- **Safe workaround: disable the offending tool for the affected run**, via the
+  ECM-only passthrough added to `run_pilot.py`:
+
+  ```bash
+  make fastTestTop7 SEQ=RollerCoaster2 EXTRA=--GeoBlendIntra=0
+  # general form:
+  python scripts/run_pilot.py ... --extra-ecm-args="--GeoBlendIntra=0"
+  ```
+
+  `--extra-ecm-args` appends **only** to ECM commands (VTM/HM reject unknown
+  options). Use the `--flag=value` form — a value starting with `--` breaks
+  argparse otherwise.
+- **Consistency caveat.** This makes that point's ECM config differ from the
+  tool-on points, but `GeoBlendIntra` is one of ~100 ECM tools (<~0.5% bitrate),
+  so for a head-frames diagnostic the effect is negligible. For a rigorous curve,
+  re-run *all* QPs of the affected sequence with the flag so the curve is uniform.
+
+### Upgrading ECM does **not** fix these
+
+Verified directly against **ECM-20.0** source (both bugs present verbatim):
+
+| Bug | ECM-18.0 | ECM-20.0 |
+|---|---|---|
+| `MAX_CCSAO_CTU_NUM` (CommonDef.h) | 256 (→ patched to 4096) | **still 256** |
+| `ccSaoControl[MAX_CCSAO_CTU_NUM]` fixed array | present | present (identical) |
+| `CCSAO CTU out of range` check | present | present (identical) |
+| `should be intra and inter` assertion (InterPrediction.cpp) | present | **present, identical** |
+
+So upgrading 18.0 → 20.0 buys nothing for these two issues (and would invalidate
+the pinned baseline + require re-encoding all ECM points). **Both fixes above
+carry forward unchanged**, so if a future run does move to a newer ECM, re-apply
+the CCSAO patch and keep the `--GeoBlendIntra=0` workaround.
+
 ## Directory layout
 
 ```

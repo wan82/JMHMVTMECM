@@ -1,0 +1,13 @@
+# Sequence metadata for BQMall (Class C, 480p)
+name: BQMall
+class: C
+width: 832
+height: 480
+fps: 60
+bit_depth: 8
+chroma_format: 420
+total_frames: 600
+level: "3.1"
+yuv_filename: /Users/w/wan_data/yuv/BQMall_832x480_60.yuv
+md5: ""
+source_url: ""

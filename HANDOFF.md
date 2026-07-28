@@ -372,6 +372,74 @@ for speed; full CTC should expand to 6 QPs (see §4.6).
 order of magnitude.** When reporting in the paper, include the overlap
 percentage as a note.
 
+### 6.10 ECM aborts on 4K (Class A1/A2): "CCSAO CTU out of range"
+
+ECM (both 18.0 **and 20.0**) aborts at **initialisation** — in ~0.1 s, before
+coding a single frame — on any 4K sequence, with:
+
+```
+ERROR: In function "create" in .../SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range
+```
+
+Cause: the CCSAO "reuse CTU" tool (`JVET_AL0142_CCSAO_REUSE_CTU`) stores per-CTU
+control in a fixed-size array `uint8_t ccSaoControl[MAX_CCSAO_CTU_NUM]` with
+`MAX_CCSAO_CTU_NUM = 256`, sized for ~2K. A 3840×2160 picture at CTU 128 is
+30×17 = 510 CTUs and overflows it. VTM has no such tool and is unaffected (VTM
+encodes 4K fine).
+
+Fix: raise `MAX_CCSAO_CTU_NUM` to 4096 in `CommonLib/CommonDef.h`
+(`tools/patches/ecm_ccsao_4k.patch`, auto-applied by `build_all.sh`), then
+`make build-ecm`. Memory cost is negligible (the array lives only in the
+~48-entry `g_ccSaoPrvParam` history); CCSAO stays on, so the tool set is
+unchanged and sub-4K results are bit-identical.
+
+### 6.11 ECM crashes mid-encode on some QP/content: "should be intra and inter"
+
+On certain **QP × content** combinations, ECM (18.0 and 20.0) aborts
+*mid-encode* (exit code 1, after coding some frames) with:
+
+```
+ERROR: In function "motionCompensationGeoBlend" in .../InterPrediction.cpp: should be intra and inter
+```
+
+`getGeoBlendIntraCand()` sometimes returns a geo-partition candidate whose two
+parts are both intra or both inter, violating the mode's one-intra-one-inter
+invariant; the `CHECK` then throws. Sporadic and QP-specific — in the pilot only
+**RollerCoaster2 QP27** hit it; QP22/32/37 of the same sequence were fine.
+
+- A plain retry does **not** help (ECM is deterministic, `NumSplitThreads:1`).
+- Do **not** delete the CHECK — proceeding corrupts the bitstream.
+- Workaround: disable the tool for the affected run via the ECM-only passthrough:
+  `make fastTestTop7 SEQ=<name> EXTRA=--GeoBlendIntra=0` (or
+  `run_pilot.py --extra-ecm-args="--GeoBlendIntra=0"`; use the `=` form, VTM
+  never receives it). `GeoBlendIntra` is one of ~100 ECM tools (<~0.5% bitrate),
+  so for the head-frames diagnostic the effect is negligible; for a rigorous
+  curve, re-run *all* QPs of that sequence with the flag.
+
+### 6.12 Upgrading ECM does NOT fix §6.10 / §6.11
+
+Checked directly against **ECM-20.0** source: `MAX_CCSAO_CTU_NUM` is still 256,
+the `ccSaoControl[MAX_CCSAO_CTU_NUM]` array and `CCSAO CTU out of range` check
+are identical, and the `should be intra and inter` assertion + its
+`getGeoBlendIntraCand` call path are present verbatim. So there is **no bug-fix
+reason to move off the pinned ECM-18.0** — a version bump would only invalidate
+the baseline (see §3) and force re-encoding every ECM point. If a future run
+does upgrade, re-apply the CCSAO patch and keep the `--GeoBlendIntra=0`
+workaround; they carry forward unchanged.
+
+### 6.13 macOS "Killed: 9" on a freshly built encoder (Apple Silicon)
+
+On arm64 macOS, a just-rebuilt encoder binary may be SIGKILLed by AMFI on the
+first launch (exit code **-9**, zero output — it dies before `main()`), because
+its ad-hoc code signature doesn't validate after `xcodebuild` + `cp` to `bin/`.
+The tell: **zero output + exit -9** means the OS killed it pre-launch (a real
+crash has output and a different signal). Fix: re-sign in place —
+`codesign --force --sign - bin/EncoderApp_ECM && xattr -cr bin/EncoderApp_ECM`.
+`build_all.sh` now does this automatically after every copy (`resign_macos`), so
+a plain `make build-*` shouldn't hit it again; the manual command is the fallback
+if it ever recurs. Distinguish this from §6.10 (that one *does* print the ECM
+tool-config banner first, then throws — the program actually ran).
+
 ---
 
 ## 7. Notes for paper writing

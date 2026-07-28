@@ -72,6 +72,19 @@ apply_patch_if_present() {
   fi
 }
 
+# --- helper: ad-hoc re-sign a binary on macOS ---
+# A binary produced by xcodebuild and then `cp`-ed into bin/ can be SIGKILLed by
+# AMFI on launch ("Killed: 9", exit -9, no output) because its ad-hoc signature
+# doesn't validate at the new path. Re-signing in place at the final location
+# fixes it, and clearing xattrs removes any quarantine flag. No-op off macOS.
+resign_macos() {
+  local bin="$1"
+  if [ "$PLATFORM" = "macos" ]; then
+    codesign --force --sign - "$bin" 2>/dev/null || true
+    xattr -cr "$bin" 2>/dev/null || true
+  fi
+}
+
 # --- locate source trees ---
 locate_src() {
   local pattern="$1"
@@ -185,6 +198,7 @@ build_jm() {
   fi
   cp "$lencod" "$BIN_DIR/lencod"
   chmod +x "$BIN_DIR/lencod"
+  resign_macos "$BIN_DIR/lencod"
   echo "JM binary: $BIN_DIR/lencod"
 }
 
@@ -206,6 +220,7 @@ build_hm() {
   fi
   cp "$tapp" "$BIN_DIR/TAppEncoder"
   chmod +x "$BIN_DIR/TAppEncoder"
+  resign_macos "$BIN_DIR/TAppEncoder"
   echo "HM binary: $BIN_DIR/TAppEncoder"
 }
 
@@ -222,12 +237,25 @@ build_vvc_like() {
   src="$(locate_src "$pattern")"
   echo "Source: $src"
 
+  local lower
+  lower="$(echo "$label" | tr '[:upper:]' '[:lower:]')"
+
   # ARM macOS patches if any
   if [ "$PLATFORM" = "macos" ] && [ "$UNAME_M" = "arm64" ]; then
-    local lower
-    lower="$(echo "$label" | tr '[:upper:]' '[:lower:]')"
     apply_patch_if_present "$src" "${lower}_arm_macos.patch"
   fi
+
+  # codec-comparison-pilot: head-frames early-stop hook in EncGOP.cpp (all
+  # platforms). Enables `make encode N` to cap VTM/ECM at N coded pictures via
+  # the PILOT_MAX_CODED_PICS env var. Harmless if the working-tree source
+  # already carries the change (git apply --check fails, we skip) — the working
+  # tree is the source of truth for the build.
+  apply_patch_if_present "$src" "${lower}_head_frames.patch"
+
+  # codec-comparison-pilot: ECM-only. Raise MAX_CCSAO_CTU_NUM (256 -> 4096) so
+  # CCSAO can handle 4K (Class A: 3840x2160 = 510 CTUs at CTU128). No VTM
+  # equivalent exists, so this is a no-op for the VTM build.
+  apply_patch_if_present "$src" "${lower}_ccsao_4k.patch"
 
   cmake_configure_and_build "$src" "build" "EncoderApp"
 
@@ -237,6 +265,7 @@ build_vvc_like() {
   fi
   cp "$enc" "$BIN_DIR/$out_name"
   chmod +x "$BIN_DIR/$out_name"
+  resign_macos "$BIN_DIR/$out_name"
   echo "$label binary: $BIN_DIR/$out_name"
 }
 

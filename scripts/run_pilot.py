@@ -103,14 +103,21 @@ def load_sequence(name: str) -> dict:
         return yaml.safe_load(f)
 
 
-def make_run_dir(pilot_cfg: dict, run_id: str | None) -> Path:
+def make_run_dir(pilot_cfg: dict, run_id: str | None,
+                 run_name: str | None = None) -> Path:
     if run_id:
         run_dir = RUNS_DIR / run_id
         if not run_dir.exists():
             raise FileNotFoundError(f"Run dir not found: {run_dir}")
         return run_dir
-    stamp = dt.datetime.now().strftime(pilot_cfg.get("run_dir_pattern", "%Y-%m-%d_%H%M_pilot"))
-    run_dir = RUNS_DIR / stamp
+    if run_name:
+        # Fixed, caller-chosen directory (e.g. one per sequence for concurrent
+        # windows). Created if absent, reused if present (so a re-run resumes).
+        run_dir = RUNS_DIR / run_name
+    else:
+        stamp = dt.datetime.now().strftime(
+            pilot_cfg.get("run_dir_pattern", "%Y-%m-%d_%H%M_pilot"))
+        run_dir = RUNS_DIR / stamp
     for sub in ("bitstreams", "logs", "tmp_configs"):
         (run_dir / sub).mkdir(parents=True, exist_ok=True)
     return run_dir
@@ -120,6 +127,12 @@ def make_run_dir(pilot_cfg: dict, run_id: str | None) -> Path:
 # scripts/extract_ai_subsample.py. AI is all-intra so adjacent frames give
 # near-identical RD numbers — sampling every 8th is the JVET convention.
 AI_TSR = 8
+
+# Extra CLI args appended to ECM commands only (set from --extra-ecm-args in
+# main()). Used to disable a buggy ECM tool per-run without editing the shared
+# cfg, e.g. "--GeoBlendIntra=0". Applied at command-build time in the main
+# process, so a plain module global is safe (workers get the finished command).
+EXTRA_ECM_ARGS: list[str] = []
 
 
 # --- Per-encoder command builders ---
@@ -164,6 +177,10 @@ def build_cmd_hm_vtm_ecm(enc: str, seq: dict, cfg_name: str, qp: int,
     # remain meaningful at the encoded-picture time base.
     if cfg_name == "AI":
         cmd.append(f"--TemporalSubsampleRatio={AI_TSR}")
+    # ECM-only extra args (e.g. disabling a buggy tool). VTM rejects unknown
+    # options, so never append these to VTM/HM.
+    if enc == "ecm" and EXTRA_ECM_ARGS:
+        cmd += EXTRA_ECM_ARGS
     return cmd, bs_path, log_path
 
 
@@ -235,6 +252,38 @@ def build_command(job: Job, seq: dict, frames: int, intra_period: int,
         return build_cmd_hm_vtm_ecm(job.encoder, seq, job.config, job.qp,
                                     frames, intra_period, run_dir, job.job_id)
     raise ValueError(f"Unknown encoder: {job.encoder}")
+
+
+# --- Head-frames mode helpers ---
+# In head-frames mode (`make encode N` / --coded-frames N) the two expensive
+# VVC-family encoders (VTM, ECM) are stopped after the first N pictures in
+# CODING order. For a GOP-32 RA hierarchy N=7 gives POC {0,32,16,8,4,2,1} — the
+# I-frame plus one picture per temporal layer. The stop happens inside the
+# encoder itself (a patched EncGOP.cpp reads PILOT_MAX_CODED_PICS); here we only
+# set that env var. JM and HM are cheap, so they keep encoding in full with
+# their own native GOP (no env var, no cap).
+def job_env(job: Job, coded_frames: int) -> dict:
+    if coded_frames > 0 and job.encoder in ("vtm", "ecm"):
+        return {"PILOT_MAX_CODED_PICS": str(coded_frames)}
+    return {}
+
+
+def apply_seq_overrides(seq: dict, args) -> None:
+    """Apply CLI geometry/input overrides onto a loaded sequence dict, in place.
+
+    --input may be an absolute path (used as-is: `SEQUENCES_DIR / abspath` keeps
+    the abspath) or a bare filename resolved under sequences/.
+    """
+    if getattr(args, "input", None):
+        seq["yuv_filename"] = args.input
+    if getattr(args, "width", None):
+        seq["width"] = args.width
+    if getattr(args, "height", None):
+        seq["height"] = args.height
+    if getattr(args, "fps", None):
+        seq["fps"] = args.fps
+    if getattr(args, "bit_depth", None):
+        seq["bit_depth"] = args.bit_depth
 
 
 # --- Matrix expansion ---
@@ -311,18 +360,24 @@ def update_job_status(run_dir: Path, job: Job) -> None:
 # --- Worker ---
 def run_one_job(args: tuple) -> tuple[str, int, str]:
     """Top-level worker (must be picklable for ProcessPoolExecutor)."""
-    job_id, cmd, log_path, timeout_sec = args
+    job_id, cmd, log_path, timeout_sec, env_extra = args
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env.update(env_extra or {})
     start = time.time()
     try:
         with open(log_path, "w") as logf:
             logf.write("# CMD: " + " ".join(shlex.quote(c) for c in cmd) + "\n")
+            if env_extra:
+                logf.write("# ENV: " + " ".join(f"{k}={v}"
+                                                for k, v in env_extra.items()) + "\n")
             logf.flush()
             proc = subprocess.run(
                 cmd,
                 stdout=logf,
                 stderr=subprocess.STDOUT,
                 timeout=timeout_sec if timeout_sec > 0 else None,
+                env=env,
             )
         elapsed = time.time() - start
         return job_id, proc.returncode, f"elapsed={elapsed:.1f}s"
@@ -341,9 +396,65 @@ def main() -> int:
                     help="Override parallel_jobs from pilot.yaml.")
     ap.add_argument("--run-id", type=str, default=None,
                     help="Resume an existing run directory by name.")
+    ap.add_argument("--run-name", type=str, default=None,
+                    help="Use a fixed run directory runs/<name> (created if "
+                         "absent, resumed if present). Lets concurrent "
+                         "invocations (e.g. one window per sequence) avoid "
+                         "clobbering each other's jobs.csv.")
+    ap.add_argument("--coded-frames", type=int, default=0, metavar="N",
+                    help="Head-frames mode: cap VTM/ECM to the first N pictures "
+                         "in CODING order (N=7 -> POC 0,32,16,8,4,2,1 for GOP-32 "
+                         "RA), then exit. Forces RA config; JM/HM still encode in "
+                         "full. 0 = disabled (normal matrix).")
+    ap.add_argument("--qp", type=int, default=None,
+                    help="Override the QP list with a single QP.")
+    ap.add_argument("--seq", type=str, default=None,
+                    help="Override the sequence list with a single sequence name.")
+    ap.add_argument("--input", type=str, default=None,
+                    help="Override the input YUV path (absolute, or a bare "
+                         "filename under sequences/).")
+    ap.add_argument("--width", type=int, default=None, help="Override source width.")
+    ap.add_argument("--height", type=int, default=None, help="Override source height.")
+    ap.add_argument("--fps", type=float, default=None, help="Override frame rate.")
+    ap.add_argument("--bit-depth", type=int, default=None,
+                    help="Override input bit depth.")
+    ap.add_argument("--encoders", type=str, default=None,
+                    help="Comma-separated encoder subset, e.g. vtm,ecm.")
+    ap.add_argument("--extra-ecm-args", type=str, default="",
+                    help="Extra CLI args appended to ECM commands only, e.g. "
+                         "\"--GeoBlendIntra=0\" to disable a buggy ECM tool for "
+                         "a re-run without touching the shared cfg.")
     args = ap.parse_args()
 
     pilot_cfg = load_pilot_config()
+    coded_frames = max(0, args.coded_frames)
+
+    global EXTRA_ECM_ARGS
+    if args.extra_ecm_args:
+        EXTRA_ECM_ARGS = shlex.split(args.extra_ecm_args)
+
+    # --- CLI overrides on top of pilot.yaml ---
+    if args.encoders:
+        pilot_cfg["encoders"] = [e.strip() for e in args.encoders.split(",")
+                                 if e.strip()]
+    if args.seq:
+        pilot_cfg["sequences"] = [args.seq]
+    if args.qp is not None:
+        pilot_cfg["qps"] = [args.qp]
+
+    if coded_frames > 0:
+        # Head-frames mode is RA-only by definition ("normal RA encode, stopped
+        # after N coded pictures"). Force RA regardless of pilot.yaml.
+        pilot_cfg["configs"] = ["RA"]
+        # VTM/ECM must READ enough input frames for the GOP-32 anchor (POC 32) to
+        # exist, otherwise the hierarchy degrades. The in-encoder counter then
+        # stops coding at N. 64 (2 GOPs) is always enough and cheap (extra frames
+        # are only read, never coded). Never shrink below the configured window.
+        pilot_cfg["frames_to_encode"] = max(
+            int(pilot_cfg.get("frames_to_encode", 64)), 64)
+        print(f"[head-frames] VTM/ECM capped to first {coded_frames} coded "
+              f"pictures (RA); JM/HM encode in full.")
+
     parallel = args.jobs if args.jobs is not None else pilot_cfg["parallel_jobs"]
     timeout_sec = int(pilot_cfg.get("job_timeout_sec", 0))
     frames = int(pilot_cfg["frames_to_encode"])
@@ -357,11 +468,11 @@ def main() -> int:
                       file=sys.stderr)
                 return 2
 
-    run_dir = make_run_dir(pilot_cfg, args.run_id)
+    run_dir = make_run_dir(pilot_cfg, args.run_id, args.run_name)
     print(f"Run directory: {run_dir}")
 
     # Build matrix (or load if resuming)
-    if args.run_id and (run_dir / "jobs.csv").exists():
+    if (args.run_id or args.run_name) and (run_dir / "jobs.csv").exists():
         jobs = read_jobs_csv(run_dir)
         print(f"Resuming run with {len(jobs)} known jobs")
     else:
@@ -373,7 +484,9 @@ def main() -> int:
     runnable = []
     for j in jobs:
         if j.sequence not in seq_cache:
-            seq_cache[j.sequence] = load_sequence(j.sequence)
+            s = load_sequence(j.sequence)
+            apply_seq_overrides(s, args)
+            seq_cache[j.sequence] = s
         seq = seq_cache[j.sequence]
         ip = ctc_intra_period(seq["fps"])
         cmd, bs_path, log_path = build_command(j, seq, frames, ip, run_dir)
@@ -387,6 +500,10 @@ def main() -> int:
         print(f"\nTotal jobs: {len(runnable)}")
         for j in runnable:
             print(f"\n# {j.job_id} [{j.status}]")
+            env_extra = job_env(j, coded_frames)
+            if env_extra:
+                print("  ENV: " + " ".join(f"{k}={v}"
+                                           for k, v in env_extra.items()))
             print("  " + " ".join(shlex.quote(c) for c in j.cmd))
         return 0
 
@@ -405,7 +522,8 @@ def main() -> int:
     write_jobs_csv(run_dir, runnable)
 
     # Submit
-    payloads = [(j.job_id, j.cmd, j.log_path, timeout_sec) for j in pending]
+    payloads = [(j.job_id, j.cmd, j.log_path, timeout_sec,
+                 job_env(j, coded_frames)) for j in pending]
     by_id = {j.job_id: j for j in runnable}
 
     completed = 0

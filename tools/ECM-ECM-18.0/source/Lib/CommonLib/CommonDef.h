@@ -497,7 +497,7 @@ static const int MAX_CCSAO_BAND_IDC_BITS     =                      4;
 static const int MAX_CCSAO_PRV_NUM           =                     16;
 static const int MAX_CCSAO_PRV_NUM_BITS      =                      4;
 #if JVET_AL0142_CCSAO_REUSE_CTU
-static const int MAX_CCSAO_CTU_NUM           =                    256;
+static const int MAX_CCSAO_CTU_NUM           =                   4096;  // codec-comparison-pilot: was 256 (~2K only); 4K@CTU128 needs 510
 #endif
 #else
 static const int N_C                            = 3; /* Num components*/

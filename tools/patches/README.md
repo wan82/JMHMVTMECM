@@ -80,3 +80,24 @@ upstream may have added arm64 guards itself. To handle that:
 3. Regenerate the patch with `diff -u` against the new pristine source and
    replace the old patch file here.
 4. Record the version change in `HANDOFF.md`.
+
+---
+
+## `vtm_head_frames.patch` / `ecm_head_frames.patch`
+
+Functional patches (all platforms, auto-applied by `build_all.sh`) that add a
+head-frames early-stop hook to `source/Lib/EncoderLib/EncGOP.cpp` in VTM and
+ECM. When the env var `PILOT_MAX_CODED_PICS=N` is set, `compressGOP()` exits
+cleanly after coding the first N pictures in CODING order (N=7 -> POC
+0,32,16,8,4,2,1 for a GOP-32 RA hierarchy). Used by `make encode N` (see the
+top-level README "Fast mode" section) to cap the expensive VTM/ECM encoders
+while JM/HM still encode in full. Unset / <=0 => normal full encode.
+
+The change is committed directly in the working tree, so a plain rebuild
+(`make build-vtm build-ecm`) already carries it; the patch files exist for
+documentation and for re-applying to a pristine re-checkout:
+
+```
+cd tools/VVCSoftware_VTM-VTM-23.11 && git apply ../patches/vtm_head_frames.patch
+cd tools/ECM-ECM-18.0             && git apply ../patches/ecm_head_frames.patch
+```

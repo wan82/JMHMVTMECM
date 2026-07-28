@@ -8,7 +8,42 @@ PIP          := $(PROJECT_ROOT)/.venv/bin/pip
 
 .PHONY: help venv build build-jm build-hm build-vtm build-ecm \
         subsample-ai sanity encode encode-dry parse bdrate report \
-        clean clean-runs verify-baseline
+        clean clean-runs verify-baseline fastTestTop7
+
+# Sequences for the top-7 concurrent fast test (one window per sequence).
+FASTTOP7_SEQS := Campfire RollerCoaster2 ParkScene BQMall BQSquare
+
+# --- `make encode N [QP=.. YUV=.. SEQ=.. W=.. H=.. FPS=.. BD=.. ENC=..]` ------
+# `make encode 7` runs an RA encode that caps the expensive VTM/ECM encoders to
+# the first 7 pictures in CODING order (POC 0,32,16,8,4,2,1 — the I-frame plus
+# one picture per temporal layer); JM/HM still encode in full with their own
+# GOP. The bare number is a positional argument captured from MAKECMDGOALS.
+# Optional VAR=value overrides: QP (single QP), YUV (input path), SEQ (sequence
+# name), W/H (width/height), FPS, BD (bit depth), ENC (encoder subset, e.g.
+# vtm,ecm). Plain `make encode` (no number) runs the normal full matrix.
+ifneq ($(filter encode encode-dry,$(MAKECMDGOALS)),)
+  ENCODE_EXTRA := $(filter-out encode encode-dry subsample-ai,$(MAKECMDGOALS))
+  CODED_FRAMES := $(firstword $(ENCODE_EXTRA))
+  # Turn the bare positional goal(s) (e.g. `7`) into no-ops so `make encode 7`
+  # doesn't fail with "No rule to make target '7'". Only defined when
+  # encode/encode-dry is actually a goal, so ordinary typos still error.
+  ifneq ($(ENCODE_EXTRA),)
+$(ENCODE_EXTRA):
+	@:
+  endif
+endif
+
+# Assemble optional run_pilot.py flags from the positional count + VAR overrides.
+PILOT_ARGS  = $(if $(CODED_FRAMES),--coded-frames $(CODED_FRAMES))
+PILOT_ARGS += $(if $(QP),--qp $(QP))
+PILOT_ARGS += $(if $(SEQ),--seq $(SEQ))
+PILOT_ARGS += $(if $(YUV),--input $(YUV))
+PILOT_ARGS += $(if $(W),--width $(W))
+PILOT_ARGS += $(if $(H),--height $(H))
+PILOT_ARGS += $(if $(FPS),--fps $(FPS))
+PILOT_ARGS += $(if $(BD),--bit-depth $(BD))
+PILOT_ARGS += $(if $(ENC),--encoders $(ENC))
+PILOT_ARGS += $(if $(EXTRA),--extra-ecm-args=$(EXTRA))
 
 help:
 	@echo "Targets:"
@@ -17,8 +52,14 @@ help:
 	@echo "  make build-<encoder>  Build a single encoder"
 	@echo "  make sanity           Run a single tiny encode per encoder to verify build"
 	@echo "  make subsample-ai     Pre-extract every 8th frame for JM AI (CTC AI methodology)"
-	@echo "  make encode-dry       Print the full job matrix without executing"
+	@echo "  make encode-dry [N]   Print the job matrix without executing"
 	@echo "  make encode           Run the full pilot encode matrix"
+	@echo "  make encode N         RA head-frames: cap VTM/ECM to first N coded"
+	@echo "                        pictures (e.g. 7 -> POC 0,32,16,8,4,2,1);"
+	@echo "                        JM/HM full. Opt: QP= YUV= SEQ= W= H= FPS= BD= ENC="
+	@echo "  make fastTestTop7 SEQ=X  Top-7 VTM+ECM for one sequence (per-window,"
+	@echo "                        4 QPs serial). No SEQ: background-launch all 5."
+	@echo "                        EXTRA='--GeoBlendIntra=0' → 仅追加到 ECM 命令行"
 	@echo "  make parse            Parse logs in latest run to results/raw_metrics.csv"
 	@echo "  make bdrate           Compute BD-rate from raw_metrics.csv"
 	@echo "  make report           Generate Markdown report and figures"
@@ -51,10 +92,34 @@ subsample-ai:
 	$(PYTHON) scripts/extract_ai_subsample.py
 
 encode-dry: subsample-ai
-	$(PYTHON) scripts/run_pilot.py --dry-run
+	$(PYTHON) scripts/run_pilot.py --dry-run $(PILOT_ARGS)
 
 encode: subsample-ai
-	$(PYTHON) scripts/run_pilot.py
+	$(PYTHON) scripts/run_pilot.py $(PILOT_ARGS)
+
+# Top-7 concurrent fast test: VTM+ECM (VTM first), first 7 coded pictures only.
+#   make fastTestTop7 SEQ=Campfire   # one sequence per window (open 5 windows)
+#   make fastTestTop7                # no SEQ: background-launch all 5 at once
+# Per window the 4 QPs (from pilot.yaml) run SERIALLY (--jobs 1) so a 4K window
+# never holds two encodes at once; each sequence writes its own runs/fastTop7_<SEQ>/.
+fastTestTop7:
+ifeq ($(strip $(SEQ)),)
+	@echo "fastTestTop7: launching VTM+ECM top-7 for 5 sequences concurrently..."
+	@mkdir -p runs
+	@for s in $(FASTTOP7_SEQS); do \
+	  echo "  -> $$s  (log: runs/fastTop7_$$s.out)"; \
+	  $(PYTHON) scripts/run_pilot.py --coded-frames 7 --seq $$s \
+	    --encoders vtm,ecm --jobs 1 --run-name fastTop7_$$s \
+	    $(if $(EXTRA),--extra-ecm-args=$(EXTRA)) \
+	    > runs/fastTop7_$$s.out 2>&1 & \
+	done; \
+	wait; \
+	echo "fastTestTop7: all 5 sequences finished."
+else
+	$(PYTHON) scripts/run_pilot.py --coded-frames 7 --seq $(SEQ) \
+	  --encoders vtm,ecm --jobs 1 --run-name fastTop7_$(SEQ) \
+	  $(if $(EXTRA),--extra-ecm-args=$(EXTRA))
+endif
 
 parse:
 	$(PYTHON) scripts/parse_logs.py

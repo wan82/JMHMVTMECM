@@ -1,0 +1,13 @@
+# Sequence metadata for Campfire (JVET Class A1, 4K)
+name: Campfire
+class: A1
+width: 3840
+height: 2160
+fps: 30
+bit_depth: 10
+chroma_format: 420
+total_frames: 300
+level: "5.1"          # 4K30, 10-bit
+yuv_filename: /Users/w/wan_data/yuv/Campfire_3840x2160_30fps_10bit_420_bt709_videoRange.yuv
+md5: ""
+source_url: ""
