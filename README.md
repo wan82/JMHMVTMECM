@@ -139,9 +139,9 @@ part in any bitstream syntax or derivation, so enlarging it **provably cannot
 change** results for ≤256-CTU sequences (not just empirically identical). The
 array lives only in the ~48-entry `g_ccSaoPrvParam` history (3 components × ≤16
 kept params ≈ 184 KB extra), so the memory cost is negligible — though note the
-by-value copies of `CcSaoPrvParam` in `VLCReader.cpp` grow ~300 B → ~4 KB each,
-worth knowing if anyone ever profiles CCSAO parsing. CCSAO stays enabled, so
-ECM's tool set is unchanged.
+by-value copies of `CcSaoPrvParam` in `VLCReader.cpp` grow ≈840 B → ≈4.7 KB each
+(≈5.6×; the struct's other fields sum to ~584 B), worth knowing if anyone ever
+profiles CCSAO parsing. CCSAO stays enabled, so ECM's tool set is unchanged.
 VTM has no such tool and needs no patch. **Any 4K ECM run requires a one-time
 `make build-ecm` after this patch.**
 
@@ -171,6 +171,14 @@ stays `{false,false}`, so `!isIntra[0] && !isIntra[1]` is true and the `CHECK`
 fires. In short: an **RD-vs-reconstruction desync** (the merge index the encoder
 selected can't be reproduced when the candidate list is rebuilt), not an invalid
 candidate.
+
+> There is a *second* unwritten-`geoBI` path — the early `return true` at
+> `InterPrediction.cpp:11438` when GeoBlend isn't available — currently
+> unreachable because both availability checks (`isGeoBlendAvailable` /
+> `isGeoBlendIntraAvailable`) are SPS-level constants, so they never flip
+> mid-sequence once the tool is on. It would resurface with the **identical**
+> error message if GeoBlend availability ever became CU-dependent (e.g. a size or
+> mode constraint) — worth knowing before re-debugging this from scratch.
 
 Notes for whoever hits this:
 
