@@ -88,6 +88,11 @@ encoder reads enough input frames for the GOP-32 anchor (POC 32) to exist, then
 `make parse` still works (`parse_logs.py` aggregates the per-picture lines when
 the truncated log has no SUMMARY block).
 
+> **The head-frames `.bin` is not decodable.** The hook's `exit()` flushes
+> stdout/stderr but not the bitstream `ofstream`, so the `.bin` is truncated with
+> its tail buffer unwritten. Metrics come from the per-frame log lines, never the
+> `.bin` — do not decode it, and do not use its file size to compute bitrate.
+
 Optional overrides (any combination):
 
 ```bash
@@ -128,10 +133,15 @@ Cause: ECM-18.0's CCSAO "reuse CTU" tool (`JVET_AL0142_CCSAO_REUSE_CTU`) stores
 per-CTU control in a fixed-size array `uint8_t ccSaoControl[MAX_CCSAO_CTU_NUM]`,
 and the cap was set for ~2K (256 CTUs). A 3840×2160 picture at CTU 128 is
 30×17 = **510** CTUs, which overflows it. 4096 covers 4K at CTU128 (510) and even
-CTU64 (2040) with headroom; the array lives only in the ~48-entry
-`g_ccSaoPrvParam` history (3 components × ≤16 kept params), so the extra memory
-is negligible, and CCSAO stays enabled — ECM's tool set is unchanged, and results
-for sub-4K sequences (≤256 CTUs) are bit-identical before and after the patch.
+CTU64 (2040) with headroom. `MAX_CCSAO_CTU_NUM` occurs in only three places —
+the constant, the `ccSaoControl[...]` array size, and the `CHECK` — and takes no
+part in any bitstream syntax or derivation, so enlarging it **provably cannot
+change** results for ≤256-CTU sequences (not just empirically identical). The
+array lives only in the ~48-entry `g_ccSaoPrvParam` history (3 components × ≤16
+kept params ≈ 184 KB extra), so the memory cost is negligible — though note the
+by-value copies of `CcSaoPrvParam` in `VLCReader.cpp` grow ~300 B → ~4 KB each,
+worth knowing if anyone ever profiles CCSAO parsing. CCSAO stays enabled, so
+ECM's tool set is unchanged.
 VTM has no such tool and needs no patch. **Any 4K ECM run requires a one-time
 `make build-ecm` after this patch.**
 
@@ -144,21 +154,36 @@ after coding some frames) with:
 ERROR: In function "motionCompensationGeoBlend" in .../InterPrediction.cpp: should be intra and inter
 ```
 
-`getGeoBlendIntraCand()` occasionally returns a geometric-partition candidate
-whose two parts are both intra or both inter, violating the one-intra-one-inter
-invariant the blend mode requires; the following `CHECK` then throws. It is
-content/QP-dependent and sporadic — e.g. in the pilot only **RollerCoaster2
+It is content/QP-dependent and sporadic — e.g. in the pilot only **RollerCoaster2
 QP27** hit it, while QP22/32/37 of the same 4K sequence coded fine.
+
+**Root cause** (verified against ECM-18.0 source). It is *not* that a candidate
+is "both intra or both inter" — the candidate builder rejects those inline
+(`InterPrediction.cpp:11519–11520`, `"two part are all intra/inter"`). What
+actually happens: `GeoBlendInfo::isIntra` default-initialises to `{false,false}`
+(`Unit.h:1063`), and the call site (`InterPrediction.cpp:11763–11765`) runs the
+`CHECK` on `geoBI.isIntra` **before** it checks the function's return value.
+`getGeoBlendIntraCand()` has a `return false` path that leaves `geoBI`
+**unwritten** — taken when the RD-chosen merge index `geoMergeIdx0` is out of
+range against the candidate count re-derived at motion-compensation time
+(`idxCand >= 0 && idxCand < numGeoBlendInfoCand` fails, line 11594). `geoBI` then
+stays `{false,false}`, so `!isIntra[0] && !isIntra[1]` is true and the `CHECK`
+fires. In short: an **RD-vs-reconstruction desync** (the merge index the encoder
+selected can't be reproduced when the candidate list is rebuilt), not an invalid
+candidate.
 
 Notes for whoever hits this:
 
 - **A plain retry will not help** — ECM is deterministic (`NumSplitThreads:1`),
   so it re-crashes at the same frame.
-- **Do not delete the `CHECK`** — proceeding with the inconsistent candidate
-  produces a corrupt / non-conforming bitstream. The assertion is protecting
-  encoder–decoder consistency.
-- **Safe workaround: disable the offending tool for the affected run**, via the
-  ECM-only passthrough added to `run_pilot.py`:
+- **Do not delete the `CHECK`.** The decoder runs the same derivation
+  (`DecCu.cpp:2697`), so an index the encoder picked but can't re-derive is
+  unreproducible at decode too — the result is a genuinely **non-decodable**
+  bitstream, not merely an encoder-internal inconsistency.
+- **Safe workaround: disable the tool for the affected run** via the ECM-only
+  passthrough. Note `GeoBlendIntra`'s *encoder default is off* (`EncAppCfg.cpp:1259`);
+  `configs/ecm/encoder_randomaccess_ecm.cfg:156` explicitly turns it on, so
+  `--GeoBlendIntra=0` simply **reverts to ECM's default**, not "removes a tool":
 
   ```bash
   make fastTestTop7 SEQ=RollerCoaster2 EXTRA=--GeoBlendIntra=0
@@ -170,9 +195,15 @@ Notes for whoever hits this:
   options). Use the `--flag=value` form — a value starting with `--` breaks
   argparse otherwise.
 - **Consistency caveat.** This makes that point's ECM config differ from the
-  tool-on points, but `GeoBlendIntra` is one of ~100 ECM tools (<~0.5% bitrate),
+  tool-on points, but `GeoBlendIntra` is one tool among ~100 (<~0.5% bitrate),
   so for a head-frames diagnostic the effect is negligible. For a rigorous curve,
   re-run *all* QPs of the affected sequence with the flag so the curve is uniform.
+- **Debugging tip.** The `printf("getGeoBlendCand( mergeIdx=%d ) failed")` +
+  `exit(0)` diagnostic (`InterPrediction.cpp:11781`) sits *after* the `CHECK`, so
+  it never prints. To see the offending `mergeIdx`, temporarily move the `CHECK`
+  below that block. Beware: it uses `exit(0)` — **exit code 0** — so if you rely
+  on it, `run_pilot.py` (which only inspects the return code) would count the
+  failed encode as a success; check the log contents, not just the exit status.
 
 ### Upgrading ECM does **not** fix these
 

@@ -402,13 +402,25 @@ On certain **QP × content** combinations, ECM (18.0 and 20.0) aborts
 ERROR: In function "motionCompensationGeoBlend" in .../InterPrediction.cpp: should be intra and inter
 ```
 
-`getGeoBlendIntraCand()` sometimes returns a geo-partition candidate whose two
-parts are both intra or both inter, violating the mode's one-intra-one-inter
-invariant; the `CHECK` then throws. Sporadic and QP-specific — in the pilot only
-**RollerCoaster2 QP27** hit it; QP22/32/37 of the same sequence were fine.
+Sporadic and QP-specific — in the pilot only **RollerCoaster2 QP27** hit it;
+QP22/32/37 of the same sequence were fine.
+
+Root cause (verified against source, *not* what a first read suggests): it is
+**not** that a candidate is both intra or both inter — the builder rejects those
+inline (`InterPrediction.cpp:11519–11520`). `GeoBlendInfo::isIntra` defaults to
+`{false,false}` (`Unit.h:1063`), and the call site runs the `CHECK` on
+`geoBI.isIntra` **before** checking the return value (`InterPrediction.cpp:11763`).
+`getGeoBlendIntraCand()` has a `return false` path (line 11594/11600) that leaves
+`geoBI` unwritten — taken when the RD-chosen merge index `geoMergeIdx0` is out of
+range vs the candidate count re-derived at MC time. `geoBI` stays `{false,false}`
+→ the `CHECK` fires. So it's an **RD-vs-reconstruction desync**, and because the
+decoder runs the same derivation (`DecCu.cpp:2697`) the stream is genuinely
+**non-decodable**. Note `GeoBlendIntra`'s encoder default is *off*
+(`EncAppCfg.cpp:1259`); the RA cfg turns it on, so `--GeoBlendIntra=0` reverts to
+ECM's default rather than removing a tool.
 
 - A plain retry does **not** help (ECM is deterministic, `NumSplitThreads:1`).
-- Do **not** delete the CHECK — proceeding corrupts the bitstream.
+- Do **not** delete the CHECK — the stream would be non-decodable (see above).
 - Workaround: disable the tool for the affected run via the ECM-only passthrough:
   `make fastTestTop7 SEQ=<name> EXTRA=--GeoBlendIntra=0` (or
   `run_pilot.py --extra-ecm-args="--GeoBlendIntra=0"`; use the `=` form, VTM

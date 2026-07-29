@@ -54,7 +54,7 @@ PILOT_ARGS += $(if $(H),--height $(H))
 PILOT_ARGS += $(if $(FPS),--fps $(FPS))
 PILOT_ARGS += $(if $(BD),--bit-depth $(BD))
 PILOT_ARGS += $(if $(ENC),--encoders $(ENC))
-PILOT_ARGS += $(if $(EXTRA),--extra-ecm-args=$(EXTRA))
+PILOT_ARGS += $(if $(EXTRA),--extra-ecm-args='$(EXTRA)')
 
 help:
 	@echo "Targets:"
@@ -122,7 +122,7 @@ ifeq ($(strip $(SEQ)),)
 	  echo "  -> $$s  (log: runs/fastTop7_$$s.out)"; \
 	  $(PYTHON) scripts/run_pilot.py --coded-frames 7 --seq $$s \
 	    --encoders $(FT7_ENC) --jobs 1 --run-name fastTop7_$$s$(TAG) \
-	    $(if $(EXTRA),--extra-ecm-args=$(EXTRA)) \
+	    $(if $(EXTRA),--extra-ecm-args='$(EXTRA)') \
 	    > runs/fastTop7_$$s$(TAG).out 2>&1 & \
 	done; \
 	wait; \
@@ -130,7 +130,7 @@ ifeq ($(strip $(SEQ)),)
 else
 	$(PYTHON) scripts/run_pilot.py --coded-frames 7 --seq $(SEQ) \
 	  --encoders $(FT7_ENC) --jobs 1 --run-name fastTop7_$(SEQ)$(TAG) \
-	  $(if $(EXTRA),--extra-ecm-args=$(EXTRA))
+	  $(if $(EXTRA),--extra-ecm-args='$(EXTRA)')
 endif
 
 parse:
