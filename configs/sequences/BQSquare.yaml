@@ -8,6 +8,6 @@ bit_depth: 8
 chroma_format: 420
 total_frames: 600
 level: "3"
-yuv_filename: /Users/w/wan_data/yuv/BQSquare_416x240_60.yuv
+yuv_filename: BQSquare_416x240_60.yuv
 md5: ""
 source_url: ""

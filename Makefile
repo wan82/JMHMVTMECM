@@ -13,6 +13,17 @@ PIP          := $(PROJECT_ROOT)/.venv/bin/pip
 # Sequences for the top-7 concurrent fast test (one window per sequence).
 FASTTOP7_SEQS := Campfire RollerCoaster2 ParkScene BQMall BQSquare
 
+# Encoder set for fastTestTop7 (default VTM+ECM; override with ENC=ecm to skip
+# VTM, e.g. for a tool-off ECM re-run whose VTM points already exist elsewhere).
+# A plain assignment avoids the comma-in-$(if) pitfall of "vtm,ecm".
+FT7_ENC := vtm,ecm
+ifneq ($(ENC),)
+  FT7_ENC := $(ENC)
+endif
+# TAG appends a suffix to the run directory name so a variant run (e.g. a
+# GeoBlendIntra-off re-run) is recorded separately from the original:
+#   TAG=_nogbi -> runs/fastTop7_<SEQ>_nogbi/   (default empty = runs/fastTop7_<SEQ>/)
+
 # --- `make encode N [QP=.. YUV=.. SEQ=.. W=.. H=.. FPS=.. BD=.. ENC=..]` ------
 # `make encode 7` runs an RA encode that caps the expensive VTM/ECM encoders to
 # the first 7 pictures in CODING order (POC 0,32,16,8,4,2,1 — the I-frame plus
@@ -59,7 +70,8 @@ help:
 	@echo "                        JM/HM full. Opt: QP= YUV= SEQ= W= H= FPS= BD= ENC="
 	@echo "  make fastTestTop7 SEQ=X  Top-7 VTM+ECM for one sequence (per-window,"
 	@echo "                        4 QPs serial). No SEQ: background-launch all 5."
-	@echo "                        EXTRA='--GeoBlendIntra=0' → 仅追加到 ECM 命令行"
+	@echo "                        Opt: EXTRA='--GeoBlendIntra=0' ENC=ecm TAG=_nogbi"
+	@echo "                        (TAG -> separate runs/fastTop7_<SEQ><TAG>/ dir)"
 	@echo "  make parse            Parse logs in latest run to results/raw_metrics.csv"
 	@echo "  make bdrate           Compute BD-rate from raw_metrics.csv"
 	@echo "  make report           Generate Markdown report and figures"
@@ -109,15 +121,15 @@ ifeq ($(strip $(SEQ)),)
 	@for s in $(FASTTOP7_SEQS); do \
 	  echo "  -> $$s  (log: runs/fastTop7_$$s.out)"; \
 	  $(PYTHON) scripts/run_pilot.py --coded-frames 7 --seq $$s \
-	    --encoders vtm,ecm --jobs 1 --run-name fastTop7_$$s \
+	    --encoders $(FT7_ENC) --jobs 1 --run-name fastTop7_$$s$(TAG) \
 	    $(if $(EXTRA),--extra-ecm-args=$(EXTRA)) \
-	    > runs/fastTop7_$$s.out 2>&1 & \
+	    > runs/fastTop7_$$s$(TAG).out 2>&1 & \
 	done; \
 	wait; \
 	echo "fastTestTop7: all 5 sequences finished."
 else
 	$(PYTHON) scripts/run_pilot.py --coded-frames 7 --seq $(SEQ) \
-	  --encoders vtm,ecm --jobs 1 --run-name fastTop7_$(SEQ) \
+	  --encoders $(FT7_ENC) --jobs 1 --run-name fastTop7_$(SEQ)$(TAG) \
 	  $(if $(EXTRA),--extra-ecm-args=$(EXTRA))
 endif
 

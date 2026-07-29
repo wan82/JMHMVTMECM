@@ -8,6 +8,6 @@ bit_depth: 10
 chroma_format: 420
 total_frames: 300
 level: "5.2"          # 4K60, 10-bit
-yuv_filename: /Users/w/wan_data/yuv/RollerCoaster2_3840x2160_60fps_10bit_420.yuv
+yuv_filename: RollerCoaster2_3840x2160_60fps_10bit_420.yuv
 md5: ""
 source_url: ""

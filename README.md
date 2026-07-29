@@ -39,8 +39,11 @@ export TOOLS_DIR=/path/to/JM_HM_VTM_ECM   # parent dir holding the four source t
 # 3. Build all four encoders (~10–30 min on M4 Max)
 make build
 
-# 4. Drop YUV files into sequences/ — see sequences/README.md
-#    (BasketballDrill_832x480_50.yuv, BlowingBubbles_416x240_50.yuv)
+# 4. Provide the input YUVs. Sequence YAMLs store only the bare filename; it is
+#    resolved under $YUV_DIR (default: the project's sequences/ dir). Either
+#    drop the YUVs into sequences/, or point YUV_DIR at where they already live:
+#      export YUV_DIR=/path/to/yuv
+#    (keeps machine-specific absolute paths out of the committed configs).
 
 # 5. Sanity check (one tiny encode per encoder, ~1 minute total)
 make sanity

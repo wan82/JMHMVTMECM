@@ -36,6 +36,18 @@ CONFIGS_DIR = PROJECT_ROOT / "configs"
 SEQUENCES_DIR = PROJECT_ROOT / "sequences"
 RUNS_DIR = PROJECT_ROOT / "runs"
 
+# Base directory for input YUVs. Sequence YAMLs store only the bare filename,
+# resolved under $YUV_DIR — so no machine-specific absolute path is committed.
+# Defaults to the project's sequences/ dir; e.g. `export YUV_DIR=/data/yuv`.
+YUV_DIR = Path(os.environ["YUV_DIR"]) if os.environ.get("YUV_DIR") else SEQUENCES_DIR
+
+
+def resolve_yuv(seq: dict) -> Path:
+    """Resolve a sequence's input YUV path. An absolute yuv_filename is used
+    as-is; a bare filename is resolved under YUV_DIR (default sequences/)."""
+    p = Path(seq["yuv_filename"])
+    return p if p.is_absolute() else (YUV_DIR / seq["yuv_filename"])
+
 # Maps the abstract config name (AI/RA/LDB/LDP) to each encoder's cfg filename.
 CONFIG_MAP = {
     "AI":  {"jm": "encoder_JM_Intra_HE.cfg",
@@ -141,7 +153,7 @@ def build_cmd_hm_vtm_ecm(enc: str, seq: dict, cfg_name: str, qp: int,
                          job_id: str) -> tuple[list[str], Path, Path]:
     binary = BIN_DIR / BIN_MAP[enc]
     enc_cfg = CONFIGS_DIR / enc / CONFIG_MAP[cfg_name][enc]
-    yuv_path = SEQUENCES_DIR / seq["yuv_filename"]
+    yuv_path = resolve_yuv(seq)
     bs_path = run_dir / "bitstreams" / f"{job_id}.bin"
     log_path = run_dir / "logs" / f"{job_id}.log"
 
@@ -197,7 +209,7 @@ def build_cmd_jm(seq: dict, cfg_name: str, qp: int, frames: int,
     # output kbps on the same time base as HM/VTM/ECM (which divide by
     # source_fps/TSR), we lie to JM about FrameRate: tell it fps/TSR.
     if cfg_name == "AI":
-        src_yuv = SEQUENCES_DIR / seq["yuv_filename"]
+        src_yuv = resolve_yuv(seq)
         sub_yuv = src_yuv.with_name(src_yuv.stem + f"_AI_TSR{AI_TSR}.yuv")
         if not sub_yuv.exists():
             raise FileNotFoundError(
@@ -207,7 +219,7 @@ def build_cmd_jm(seq: dict, cfg_name: str, qp: int, frames: int,
         encoded_frames = frames // AI_TSR
         framerate = seq["fps"] / AI_TSR  # may be fractional, JM accepts that
     else:
-        yuv_path = SEQUENCES_DIR / seq["yuv_filename"]
+        yuv_path = resolve_yuv(seq)
         encoded_frames = frames
         framerate = seq["fps"]
 

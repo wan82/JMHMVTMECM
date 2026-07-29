@@ -8,6 +8,6 @@ bit_depth: 8
 chroma_format: 420
 total_frames: 240
 level: "4"
-yuv_filename: /Users/w/wan_data/yuv/ParkScene_1920x1080_24.yuv
+yuv_filename: ParkScene_1920x1080_24.yuv
 md5: ""
 source_url: ""
