@@ -431,16 +431,17 @@ caveat still applies), it is not a harmless "back to normal ECM".
   so for the head-frames diagnostic the effect is negligible; for a rigorous
   curve, re-run *all* QPs of that sequence with the flag.
 
-### 6.12 Upgrading ECM does NOT fix §6.10 / §6.11
+### 6.12 As of the latest release (ECM-20.0), upgrading does NOT fix §6.10 / §6.11
 
-Checked directly against **ECM-20.0** source: `MAX_CCSAO_CTU_NUM` is still 256,
-the `ccSaoControl[MAX_CCSAO_CTU_NUM]` array and `CCSAO CTU out of range` check
-are identical, and the `should be intra and inter` assertion + its
-`getGeoBlendIntraCand` call path are present verbatim. So there is **no bug-fix
-reason to move off the pinned ECM-18.0** — a version bump would only invalidate
-the baseline (see §3) and force re-encoding every ECM point. If a future run
-does upgrade, re-apply the CCSAO patch and keep the `--GeoBlendIntra=0`
-workaround; they carry forward unchanged.
+Checked against the current latest ECM version (**20.0**): `MAX_CCSAO_CTU_NUM` is
+still 256, the `ccSaoControl[MAX_CCSAO_CTU_NUM]` array and `CCSAO CTU out of range`
+check are identical, and the `should be intra and inter` assertion + its
+`getGeoBlendIntraCand` call path are present verbatim. So *as of 20.0* there is
+**no bug-fix reason to move off the pinned ECM-18.0** — a version bump would only
+invalidate the baseline (see §3) and force re-encoding every ECM point. Both
+fixes carry forward unchanged through 20.0; if some future release finally fixes
+them, drop the patch/workaround for that version — but re-check the source first,
+since nothing changed from 18.0 through 20.0.
 
 ### 6.13 macOS "Killed: 9" on a freshly built encoder (Apple Silicon)
 

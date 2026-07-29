@@ -225,9 +225,10 @@ Notes for whoever hits this:
   on it, `run_pilot.py` (which only inspects the return code) would count the
   failed encode as a success; check the log contents, not just the exit status.
 
-### Upgrading ECM does **not** fix these
+### As of the latest release (ECM-20.0), upgrading does **not** fix these
 
-Verified directly against **ECM-20.0** source (both bugs present verbatim):
+Checked against the current latest ECM version (**20.0**) — both bugs are still
+present verbatim in its source:
 
 | Bug | ECM-18.0 | ECM-20.0 |
 |---|---|---|
@@ -236,10 +237,11 @@ Verified directly against **ECM-20.0** source (both bugs present verbatim):
 | `CCSAO CTU out of range` check | present | present (identical) |
 | `should be intra and inter` assertion (InterPrediction.cpp) | present | **present, identical** |
 
-So upgrading 18.0 → 20.0 buys nothing for these two issues (and would invalidate
+So as of 20.0, upgrading buys nothing for these two issues (and would invalidate
 the pinned baseline + require re-encoding all ECM points). **Both fixes above
-carry forward unchanged**, so if a future run does move to a newer ECM, re-apply
-the CCSAO patch and keep the `--GeoBlendIntra=0` workaround.
+carry forward unchanged** to 20.0; if a future release finally fixes them, drop
+the CCSAO patch / `--GeoBlendIntra=0` workaround for that version — but re-check
+the source first, since nothing has changed here from 18.0 through 20.0.
 
 ## Directory layout
 
