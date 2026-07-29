@@ -181,9 +181,21 @@ Notes for whoever hits this:
   unreproducible at decode too — the result is a genuinely **non-decodable**
   bitstream, not merely an encoder-internal inconsistency.
 - **Safe workaround: disable the tool for the affected run** via the ECM-only
-  passthrough. Note `GeoBlendIntra`'s *encoder default is off* (`EncAppCfg.cpp:1259`);
-  `configs/ecm/encoder_randomaccess_ecm.cfg:156` explicitly turns it on, so
-  `--GeoBlendIntra=0` simply **reverts to ECM's default**, not "removes a tool":
+  passthrough. Where `GeoBlendIntra` is actually set — three levels, a common
+  point of confusion:
+    - **ECM source built-in default** (`EncAppCfg.cpp:1259`): **0 / off** — only
+      the fallback used when no config sets it.
+    - **Official ECM RA config** (`encoder_randomaccess_ecm.cfg:156`) **and this
+      repo's copy** (`configs/ecm/encoder_randomaccess_ecm.cfg`): **1 / on** —
+      unchanged from upstream. So a normal RA run has it **on**.
+    - **`--GeoBlendIntra=0`** (passed via `EXTRA=`): a **per-run command-line
+      override**, applied only to a specific tool-off re-run; it does **not**
+      edit the config file.
+
+  So this repo's RA config is `1` (same as official); `--GeoBlendIntra=0` is a
+  one-off runtime override that **deviates** from that config — it genuinely
+  disables a tool the CTC config enables (hence the consistency caveat below), it
+  is not a harmless "back to default":
 
   ```bash
   make fastTestTop7 SEQ=RollerCoaster2 EXTRA=--GeoBlendIntra=0

@@ -415,9 +415,12 @@ inline (`InterPrediction.cpp:11519–11520`). `GeoBlendInfo::isIntra` defaults t
 range vs the candidate count re-derived at MC time. `geoBI` stays `{false,false}`
 → the `CHECK` fires. So it's an **RD-vs-reconstruction desync**, and because the
 decoder runs the same derivation (`DecCu.cpp:2697`) the stream is genuinely
-**non-decodable**. Note `GeoBlendIntra`'s encoder default is *off*
-(`EncAppCfg.cpp:1259`); the RA cfg turns it on, so `--GeoBlendIntra=0` reverts to
-ECM's default rather than removing a tool.
+**non-decodable**. Nuance: `GeoBlendIntra`'s built-in program default is *off*
+(`EncAppCfg.cpp:1259`), but the official upstream RA cfg
+(`encoder_randomaccess_ecm.cfg:156`) sets it to 1 — so a standard RA run has it
+**on**. `--GeoBlendIntra=0` matches the bare default but *deviates from the
+official RA config*: it does disable a CTC-enabled tool (hence the consistency
+caveat still applies), it is not a harmless "back to normal ECM".
 
 - A plain retry does **not** help (ECM is deterministic, `NumSplitThreads:1`).
 - Do **not** delete the CHECK — the stream would be non-decodable (see above).
