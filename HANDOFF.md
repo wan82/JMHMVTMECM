@@ -374,34 +374,26 @@ percentage as a note.
 
 ### 6.10 4K ECM must run at `CTUSize 256` — "CCSAO CTU out of range"
 
-**NOTE: if a 4K RA run crashes, first check that ECM's 4K `CTUSize` is 256, not
-128.** ECM aborts at **initialisation** (~0.1 s, before a single frame) with:
+**NOTE: if a 4K RA run crashes at startup, first check that ECM's 4K `CTUSize` is
+256, not 128** — grep the log banner for `ECM ENC CFG: CTU:`. At CTU128 a
+3840×2160 picture is 30×17 = **510** CTUs and overflows CCSAO's fixed
+`ccSaoControl[MAX_CCSAO_CTU_NUM=256]` array, aborting at initialisation with
+`SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range`. At the CTC's `CTUSize
+256` it is only 15×9 = **135** CTUs and fits.
 
-```
-ERROR: In function "create" in .../SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range
-```
-
-CCSAO's "reuse CTU" tool (`JVET_AL0142_CCSAO_REUSE_CTU`) keeps per-CTU control in
-a fixed `uint8_t ccSaoControl[MAX_CCSAO_CTU_NUM]` with `MAX_CCSAO_CTU_NUM = 256`,
-sized for ~2K. A 3840×2160 picture is 30×17 = **510** CTUs at CTU128 and
-overflows it; at the CTC's `CTUSize 256` it is only 15×9 = **135** CTUs and fits.
-Check which one you ran by grepping the log banner for `ECM ENC CFG: CTU:`.
-
-Where the 256 comes from: JVET CTC tunes `CTUSize` and the MTT depths **per
-resolution class**, and ECM ships those tunings in
-`cfg/per-class/class{A,B,C,D}_randomaccess.cfg`. They are mirrored verbatim under
+The 256 comes from the per-class CTC cfgs: JVET tunes `CTUSize` and the MTT
+depths **per resolution class**, ECM ships them in
+`cfg/per-class/class{A,B,C,D}_randomaccess.cfg`, they are mirrored verbatim under
 `configs/ecm/per-class/`, and `run_pilot.py` layers the matching file as a
-**second `-c`** on every ECM **RA** job (later `-c` wins, so its `CTUSize`/MTT
-override the base cfg). VTM never gets these files (no 256-CTU support, and they
-contain ECM-only keys).
+**second `-c`** on every ECM **RA** job (later `-c` wins). VTM never gets these
+files (no 256-CTU support, and they contain ECM-only keys).
 
-**Keep `tools/patches/ecm_ccsao_4k.patch` applied** (256 → 4096, auto-applied by
-`build_all.sh`). The per-class layering is **RA-only**, and both
-`encoder_randomaccess_ecm.cfg` and `encoder_intra_ecm.cfg` say `CTUSize 128`, so
-a 4K **AI** run — or an RA run for a sequence whose `class` field doesn't map to
-a per-class file — is back at 510 CTUs and would abort without it. The patch
-cannot change results (the constant appears only in the array size and the
-`CHECK`, never in bitstream syntax). VTM has no CCSAO and is unaffected.
+**AI has no per-class cfg and stays at `CTUSize 128`** — so 4K AI (510 CTUs), and
+even 2560×1600 AI (20×13 = 260), still overflow. That is why
+`tools/patches/ecm_ccsao_4k.patch` (256 → 4096, auto-applied by `build_all.sh`)
+stays applied. It cannot change results — the constant appears only in the array
+size and the `CHECK`, never in bitstream syntax — and costs ~184 KB. If AI is
+ever dropped from scope (see §4.5), the patch can go with it.
 
 ### 6.11 ECM crashes mid-encode on some QP/content: "should be intra and inter"
 

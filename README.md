@@ -121,36 +121,14 @@ review and for re-applying to a pristine re-checkout.
 `make fastTestTop7` (see "Fast mode" above).
 
 **`ecm_ccsao_4k.patch`** — raises `MAX_CCSAO_CTU_NUM` from **256 to 4096** in
-ECM's `CommonLib/CommonDef.h`. Safety net for the abort below.
-
-> **NOTE — if a 4K RA run crashes at startup, first check that ECM is using
-> `CTUSize 256`, not 128.** ECM aborts at initialisation (~0.1 s, before a single
-> frame) with:
->
-> ```
-> ERROR: In function "create" in .../SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range
-> ```
->
-> CCSAO's "reuse CTU" tool (`JVET_AL0142_CCSAO_REUSE_CTU`) keeps per-CTU control
-> in a fixed `uint8_t ccSaoControl[MAX_CCSAO_CTU_NUM]` sized 256, i.e. for ~2K.
-> A 3840×2160 picture is 30×17 = **510** CTUs at CTU128 and overflows it, but
-> only 15×9 = **135** CTUs at the CTC's `CTUSize 256` — which fits. Grep the log
-> banner for `ECM ENC CFG: CTU:` to see which one you actually ran. 4K RA gets
-> 256 from `configs/ecm/per-class/classA_randomaccess.cfg`, layered on
-> automatically by `run_pilot.py`; **4K AI does not** (per-class layering is
-> RA-only and both base cfgs say `CTUSize 128`), so keep the patch applied.
-
-4096 covers 4K at CTU128 (510) and even CTU64 (2040) with headroom.
-`MAX_CCSAO_CTU_NUM` occurs in only three places — the constant, the
-`ccSaoControl[...]` array size, and the `CHECK` — and takes no part in any
-bitstream syntax or derivation, so enlarging it **provably cannot change**
-results for ≤256-CTU sequences (not just empirically identical). The array lives
-only in the ~48-entry `g_ccSaoPrvParam` history (3 components × ≤16 kept params
-≈ 184 KB extra), so the memory cost is negligible — though note the by-value
-copies of `CcSaoPrvParam` in `VLCReader.cpp` grow ≈840 B → ≈4.7 KB each (≈5.6×;
-the struct's other fields sum to ~584 B), worth knowing if anyone ever profiles
-CCSAO parsing. CCSAO stays enabled, so ECM's tool set is unchanged. VTM has no
-such tool and needs no patch.
+ECM's `CommonLib/CommonDef.h`, preventing an abort at initialisation
+(`SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range`) when a picture has more
+than 256 CTUs. **RA no longer needs it** — Class A runs at the CTC's `CTUSize
+256`, where 3840×2160 is only 15×9 = 135 CTUs. It is kept for **AI**, which has
+no per-class cfg and stays at `CTUSize 128`, where the same picture is
+30×17 = 510 CTUs (and even 2560×1600 is 260). Enlarging the constant cannot
+change results — it appears only in the array size and the `CHECK`, never in
+bitstream syntax — and costs ~184 KB. VTM has no CCSAO and needs no patch.
 
 ### Known ECM runtime bug: `GeoBlendIntra` assertion (workaround, not a patch)
 
