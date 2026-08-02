@@ -121,41 +121,70 @@ review and for re-applying to a pristine re-checkout.
 `make fastTestTop7` (see "Fast mode" above).
 
 **`ecm_ccsao_4k.patch`** — raises `MAX_CCSAO_CTU_NUM` from **256 to 4096** in
-ECM's `CommonLib/CommonDef.h`. **Without it, ECM aborts at initialisation on any
-4K sequence (Class A1/A2)** — it fails in ~0.1 s, before coding a single frame,
-with:
+ECM's `CommonLib/CommonDef.h`. Safety net for the abort below.
 
-```
-ERROR: In function "create" in .../SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range
-```
+> **NOTE — if a 4K RA run crashes at startup, first check that ECM is using
+> `CTUSize 256`, not 128.** ECM aborts at initialisation (~0.1 s, before a single
+> frame) with:
+>
+> ```
+> ERROR: In function "create" in .../SampleAdaptiveOffset.cpp:166: CCSAO CTU out of range
+> ```
+>
+> CCSAO's "reuse CTU" tool (`JVET_AL0142_CCSAO_REUSE_CTU`) keeps per-CTU control
+> in a fixed `uint8_t ccSaoControl[MAX_CCSAO_CTU_NUM]` sized 256, i.e. for ~2K.
+> A 3840×2160 picture is 30×17 = **510** CTUs at CTU128 and overflows it, but
+> only 15×9 = **135** CTUs at the CTC's `CTUSize 256` — which fits. Grep the log
+> banner for `ECM ENC CFG: CTU:` to see which one you actually ran. 4K RA gets
+> 256 from `configs/ecm/per-class/classA_randomaccess.cfg`, layered on
+> automatically by `run_pilot.py`; **4K AI does not** (per-class layering is
+> RA-only and both base cfgs say `CTUSize 128`), so keep the patch applied.
 
-Cause: ECM-18.0's CCSAO "reuse CTU" tool (`JVET_AL0142_CCSAO_REUSE_CTU`) stores
-per-CTU control in a fixed-size array `uint8_t ccSaoControl[MAX_CCSAO_CTU_NUM]`,
-and the cap was set for ~2K (256 CTUs). A 3840×2160 picture at CTU 128 is
-30×17 = **510** CTUs, which overflows it. 4096 covers 4K at CTU128 (510) and even
-CTU64 (2040) with headroom. `MAX_CCSAO_CTU_NUM` occurs in only three places —
-the constant, the `ccSaoControl[...]` array size, and the `CHECK` — and takes no
-part in any bitstream syntax or derivation, so enlarging it **provably cannot
-change** results for ≤256-CTU sequences (not just empirically identical). The
-array lives only in the ~48-entry `g_ccSaoPrvParam` history (3 components × ≤16
-kept params ≈ 184 KB extra), so the memory cost is negligible — though note the
-by-value copies of `CcSaoPrvParam` in `VLCReader.cpp` grow ≈840 B → ≈4.7 KB each
-(≈5.6×; the struct's other fields sum to ~584 B), worth knowing if anyone ever
-profiles CCSAO parsing. CCSAO stays enabled, so ECM's tool set is unchanged.
-VTM has no such tool and needs no patch. **Any 4K ECM run requires a one-time
-`make build-ecm` after this patch.**
+4096 covers 4K at CTU128 (510) and even CTU64 (2040) with headroom.
+`MAX_CCSAO_CTU_NUM` occurs in only three places — the constant, the
+`ccSaoControl[...]` array size, and the `CHECK` — and takes no part in any
+bitstream syntax or derivation, so enlarging it **provably cannot change**
+results for ≤256-CTU sequences (not just empirically identical). The array lives
+only in the ~48-entry `g_ccSaoPrvParam` history (3 components × ≤16 kept params
+≈ 184 KB extra), so the memory cost is negligible — though note the by-value
+copies of `CcSaoPrvParam` in `VLCReader.cpp` grow ≈840 B → ≈4.7 KB each (≈5.6×;
+the struct's other fields sum to ~584 B), worth knowing if anyone ever profiles
+CCSAO parsing. CCSAO stays enabled, so ECM's tool set is unchanged. VTM has no
+such tool and needs no patch.
 
 ### Known ECM runtime bug: `GeoBlendIntra` assertion (workaround, not a patch)
 
-On certain **QP × content** combinations, ECM aborts *mid-encode* (exit code 1,
-after coding some frames) with:
+**This is the one live ECM blocker.** On certain **QP × content** combinations,
+ECM aborts *mid-encode* (exit code 1, after coding some frames) with:
 
 ```
-ERROR: In function "motionCompensationGeoBlend" in .../InterPrediction.cpp: should be intra and inter
+ERROR: In function "motionCompensationGeoBlend" in .../InterPrediction.cpp:11765: should be intra and inter
 ```
 
-It is content/QP-dependent and sporadic — e.g. in the pilot only **RollerCoaster2
-QP27** hit it, while QP22/32/37 of the same 4K sequence coded fine.
+**Running the official per-class CTC config does *not* fix it.** Latest
+head-frames sweep (`make fastTestTop7 ... TAG=_ctc`), every job with its
+class's per-class cfg layered on — the two Class A sequences confirmed at
+`ECM ENC CFG: CTU:256` in the log banner, B/C/D at the base `CTU:128` (classC/D
+carry MTT overrides only, no `CTUSize`):
+
+| Sequence | Class | QP22 | QP27 | QP32 | QP37 |
+|---|---|---|---|---|---|
+| RollerCoaster2 | A2 (4K60) | OK | **OK** | OK | OK |
+| Campfire | A1 (4K30) | OK | **FAILED** | in progress | queued |
+| ParkScene / BQMall / BQSquare | B / C / D | OK | OK | OK | OK |
+
+So the switch to CTU256 moved the failure rather than removing it:
+RollerCoaster2 QP27 — the pilot's only casualty — now passes all four QPs, while
+**Campfire QP27** newly fails. It died on the **5th coded picture** (POC 4, TId 3,
+after POC 0/32/16/8) roughly 20.4 h into the job. That is the expected behaviour
+for this bug: changing CTU/MTT changes the partitioning, hence the merge
+candidate lists, hence *which* points happen to trip it — the defect itself is
+untouched.
+
+> **Both hits so far have been QP27** (RollerCoaster2 pre-per-class, Campfire
+> post-per-class). Two samples is not a pattern, but if a third QP27 failure
+> shows up it would be worth checking whether that QP's lambda makes the merge-RD
+> race unusually tight. Do not assume other QPs are safe.
 
 **Root cause** (verified against ECM-18.0 source). It is *not* that a candidate
 is "both intra or both inter" — the candidate builder rejects those inline
@@ -170,7 +199,8 @@ range against the candidate count re-derived at motion-compensation time
 stays `{false,false}`, so `!isIntra[0] && !isIntra[1]` is true and the `CHECK`
 fires. In short: an **RD-vs-reconstruction desync** (the merge index the encoder
 selected can't be reproduced when the candidate list is rebuilt), not an invalid
-candidate.
+candidate. Nothing in that path depends on CTU size, which is why the per-class
+config cannot fix it.
 
 > There is a *second* unwritten-`geoBI` path — the early `return true` at
 > `InterPrediction.cpp:11438` when GeoBlend isn't available — currently
@@ -217,7 +247,10 @@ Notes for whoever hits this:
 - **Consistency caveat.** This makes that point's ECM config differ from the
   tool-on points, but `GeoBlendIntra` is one tool among ~100 (<~0.5% bitrate),
   so for a head-frames diagnostic the effect is negligible. For a rigorous curve,
-  re-run *all* QPs of the affected sequence with the flag so the curve is uniform.
+  re-run *all* QPs of the affected sequence with the flag so the curve is uniform
+  — budget accordingly on 4K. Observed head-7 cost is strongly QP-dependent:
+  RollerCoaster2 ran 18.0 / 14.8 / 9.7 / 6.1 h for QP22/27/32/37 (~2.0 days for
+  the four), while Campfire is slower still (QP22 alone took 82,576 s ≈ 22.9 h).
 - **Debugging tip.** The `printf("getGeoBlendCand( mergeIdx=%d ) failed")` +
   `exit(0)` diagnostic (`InterPrediction.cpp:11781`) sits *after* the `CHECK`, so
   it never prints. To see the offending `mergeIdx`, temporarily move the `CHECK`
@@ -225,23 +258,22 @@ Notes for whoever hits this:
   on it, `run_pilot.py` (which only inspects the return code) would count the
   failed encode as a success; check the log contents, not just the exit status.
 
-### As of the latest release (ECM-20.0), upgrading does **not** fix these
+### As of the latest release (ECM-20.0), upgrading does **not** fix this
 
-Checked against the current latest ECM version (**20.0**) — both bugs are still
+Checked against the current latest ECM version (**20.0**) — the defect is still
 present verbatim in its source:
 
 | Bug | ECM-18.0 | ECM-20.0 |
 |---|---|---|
-| `MAX_CCSAO_CTU_NUM` (CommonDef.h) | 256 (→ patched to 4096) | **still 256** |
-| `ccSaoControl[MAX_CCSAO_CTU_NUM]` fixed array | present | present (identical) |
-| `CCSAO CTU out of range` check | present | present (identical) |
 | `should be intra and inter` assertion (InterPrediction.cpp) | present | **present, identical** |
+| `getGeoBlendIntraCand()` unwritten-`geoBI` `return false` path | present | present (identical) |
+| `MAX_CCSAO_CTU_NUM` (CommonDef.h) — patched here, but moot at CTU256 | 256 | still 256 |
 
-So as of 20.0, upgrading buys nothing for these two issues (and would invalidate
-the pinned baseline + require re-encoding all ECM points). **Both fixes above
-carry forward unchanged** to 20.0; if a future release finally fixes them, drop
-the CCSAO patch / `--GeoBlendIntra=0` workaround for that version — but re-check
-the source first, since nothing has changed here from 18.0 through 20.0.
+So as of 20.0, upgrading buys nothing (and would invalidate the pinned baseline +
+require re-encoding all ECM points). The `--GeoBlendIntra=0` workaround and the
+CCSAO patch both carry forward unchanged; if a future release finally fixes the
+assertion, drop the workaround for that version — but re-check the source first,
+since nothing has changed here from 18.0 through 20.0.
 
 ## Directory layout
 

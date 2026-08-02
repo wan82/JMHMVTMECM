@@ -147,6 +147,30 @@ AI_TSR = 8
 EXTRA_ECM_ARGS: list[str] = []
 
 
+# --- ECM official per-class CTC layering ---
+# JVET CTC tunes CTUSize + MTT depths per resolution class. ECM ships these in
+# cfg/per-class/class{A,B,C,D}_randomaccess.cfg; we mirror them under
+# configs/ecm/per-class/. They are layered ON TOP of the base RA cfg (a second
+# `-c`, so their CTUSize/MTT win over the base) for ECM RA jobs only. This is
+# what makes Class A run at CTUSize 256 (its official value) instead of the base
+# 128 — and is exactly the config a proper VTM-vs-ECM cross-gen comparison needs.
+# VTM has no 256-CTU support and rejects some ECM-only keys in these files, so it
+# is never layered (VTM already runs its correct 128-CTU CTC via its own base).
+# Sequence `class` A1/A2 both map to per-class file A (JVET groups both under
+# Class A / 4K); B/C/D map 1:1.
+CLASS_TO_PERCLASS = {"A1": "A", "A2": "A", "A": "A", "B": "B", "C": "C", "D": "D"}
+
+
+def ecm_per_class_cfg(seq: dict) -> Path | None:
+    """Return the ECM per-class RA cfg for this sequence's class, or None if the
+    class is unknown or the file is absent (caller then falls back to base only)."""
+    letter = CLASS_TO_PERCLASS.get(str(seq.get("class", "")).strip())
+    if not letter:
+        return None
+    p = CONFIGS_DIR / "ecm" / "per-class" / f"class{letter}_randomaccess.cfg"
+    return p if p.exists() else None
+
+
 # --- Per-encoder command builders ---
 def build_cmd_hm_vtm_ecm(enc: str, seq: dict, cfg_name: str, qp: int,
                          frames: int, intra_period: int, run_dir: Path,
@@ -166,6 +190,15 @@ def build_cmd_hm_vtm_ecm(enc: str, seq: dict, cfg_name: str, qp: int,
     cmd = [
         str(binary),
         "-c", str(enc_cfg),
+    ]
+    # ECM RA: layer the official per-class CTC cfg (CTUSize/MTT per resolution
+    # class) as a second `-c` so it overrides the base. RA-only: the per-class
+    # files are random-access tunings. VTM/HM never get this (see note above).
+    if enc == "ecm" and cfg_name == "RA":
+        per_class = ecm_per_class_cfg(seq)
+        if per_class is not None:
+            cmd += ["-c", str(per_class)]
+    cmd += [
         f"--InputFile={yuv_path}",
         f"--BitstreamFile={bs_path}",
         f"--SourceWidth={seq['width']}",
