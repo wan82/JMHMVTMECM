@@ -413,20 +413,23 @@ overrides only):
 | Sequence | Class | QP22 | QP27 | QP32 | QP37 |
 |---|---|---|---|---|---|
 | RollerCoaster2 | A2 (4K60) | OK | **OK** | OK | OK |
-| Campfire | A1 (4K30) | OK | **FAILED** | in progress | queued |
+| Campfire | A1 (4K30) | OK | **FAILED** | **FAILED** | OK |
 | ParkScene / BQMall / BQSquare | B / C / D | OK | OK | OK | OK |
 
-RollerCoaster2 QP27 — the pilot's only casualty — now passes; **Campfire QP27**
-newly fails, on the **5th coded picture** (POC 4, TId 3, after POC 0/32/16/8),
-~20.4 h into the job (`runs/fastTop7_Campfire_ctc/logs/0002_ecm_Campfire_RA_QP27.log`).
-Expected: changing CTU/MTT changes partitioning → changes the merge candidate
-lists → changes *which* points happen to trip it. The defect is untouched.
+RollerCoaster2 QP27 — the pilot's only casualty — now passes; **Campfire QP27 and
+QP32** fail instead. Expected: changing CTU/MTT changes partitioning → changes the
+merge candidate lists → changes *which* points happen to trip it. The defect is
+untouched.
 
-> Both hits so far have been **QP27**. Two samples is not a pattern — and the
-> earlier RollerCoaster2 crash log was not kept, so Campfire QP27 is the only one
-> still reproducible from `runs/`. If a third QP27 failure appears, check whether
-> that QP's lambda makes the merge-RD race unusually tight. Do not assume other
-> QPs are safe.
+> **Both Campfire failures die on the same picture: POC 4 (TId 3), the 5th coded
+> picture, right after POC 0/32/16/8** — see
+> `runs/fastTop7_Campfire_ctc/logs/000{2,3}_ecm_Campfire_RA_QP{27,32}.log`. QP22
+> and QP37 code that same picture fine (all 7 POCs present in their logs). So the
+> trigger is a specific block in **Campfire POC 4** that only the mid-QP
+> operating points route into the broken path: **content-driven, not
+> QP-driven**. Do not assume any QP is safe on an untested sequence. Wall-clock
+> to failure was 20.4 h (QP27) and 13.4 h (QP32), i.e. this bug costs most of a
+> day per hit on 4K.
 
 Root cause (verified against source, *not* what a first read suggests): it is
 **not** that a candidate is both intra or both inter — the builder rejects those
@@ -460,8 +463,8 @@ caveat still applies), it is not a harmless "back to normal ECM".
   figure, not measured here), so for the head-frames diagnostic the effect is
   negligible; for a rigorous curve, re-run *all* QPs of that sequence with the
   flag. Cost is strongly QP-dependent: RollerCoaster2 head-7 took 18.0 / 14.8 /
-  9.7 / 6.1 h for QP22/27/32/37 (~2.0 days total); Campfire is slower (QP22 alone
-  82,576 s ≈ 22.9 h), so budget ~2–3 days for its four points.
+  9.7 / 6.1 h for QP22/27/32/37 (~2.0 days total), Campfire 22.9 / 20.4 / 13.4 /
+  10.5 h (~2.8 days) — so budget ~2–3 days per 4K sequence.
 
 ### 6.12 As of the latest release (ECM-20.0), upgrading does NOT fix §6.11
 

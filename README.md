@@ -148,21 +148,21 @@ carry MTT overrides only, no `CTUSize`):
 | Sequence | Class | QP22 | QP27 | QP32 | QP37 |
 |---|---|---|---|---|---|
 | RollerCoaster2 | A2 (4K60) | OK | **OK** | OK | OK |
-| Campfire | A1 (4K30) | OK | **FAILED** | in progress | queued |
+| Campfire | A1 (4K30) | OK | **FAILED** | **FAILED** | OK |
 | ParkScene / BQMall / BQSquare | B / C / D | OK | OK | OK | OK |
 
 So the switch to CTU256 moved the failure rather than removing it:
 RollerCoaster2 QP27 — the pilot's only casualty — now passes all four QPs, while
-**Campfire QP27** newly fails. It died on the **5th coded picture** (POC 4, TId 3,
-after POC 0/32/16/8) roughly 20.4 h into the job. That is the expected behaviour
-for this bug: changing CTU/MTT changes the partitioning, hence the merge
-candidate lists, hence *which* points happen to trip it — the defect itself is
-untouched.
+**Campfire QP27 and QP32** fail. That is the expected behaviour for this bug:
+changing CTU/MTT changes the partitioning, hence the merge candidate lists, hence
+*which* points happen to trip it — the defect itself is untouched.
 
-> **Both hits so far have been QP27** (RollerCoaster2 pre-per-class, Campfire
-> post-per-class). Two samples is not a pattern, but if a third QP27 failure
-> shows up it would be worth checking whether that QP's lambda makes the merge-RD
-> race unusually tight. Do not assume other QPs are safe.
+> **Both Campfire failures die on the *same picture*: POC 4 (TId 3), the 5th
+> coded picture, right after POC 0/32/16/8.** QP22 and QP37 code that same
+> picture without complaint. So the trigger is a specific block in Campfire POC 4
+> that only the mid-QP operating points route into the broken path — it is
+> **content-driven, not QP-driven**, and no QP can be assumed safe on an
+> untested sequence. (Wall-clock to failure: QP27 20.4 h, QP32 13.4 h.)
 
 **Root cause** (verified against ECM-18.0 source). It is *not* that a candidate
 is "both intra or both inter" — the candidate builder rejects those inline
@@ -214,21 +214,26 @@ Notes for whoever hits this:
   is not a harmless "back to default":
 
   ```bash
-  make fastTestTop7 SEQ=RollerCoaster2 EXTRA=--GeoBlendIntra=0
+  # the live case: Campfire's whole curve, tool off, into its own run dir
+  export YUV_DIR=/path/to/yuv
+  make fastTestTop7 SEQ=Campfire ENC=ecm EXTRA='--GeoBlendIntra=0' TAG=_nogbi
   # general form:
   python scripts/run_pilot.py ... --extra-ecm-args="--GeoBlendIntra=0"
   ```
 
   `--extra-ecm-args` appends **only** to ECM commands (VTM/HM reject unknown
   options). Use the `--flag=value` form — a value starting with `--` breaks
-  argparse otherwise.
+  argparse otherwise. Two `make` gotchas: `fastTestTop7` does **not** forward
+  `QP=` (that variable is wired only into the `encode` target), so the command
+  above re-runs all four QPs — which is what a uniform curve needs anyway; and
+  always pass `TAG=`, or the re-run overwrites `runs/fastTop7_<SEQ>/` in place.
 - **Consistency caveat.** This makes that point's ECM config differ from the
   tool-on points, but `GeoBlendIntra` is one tool among ~100 (<~0.5% bitrate),
   so for a head-frames diagnostic the effect is negligible. For a rigorous curve,
   re-run *all* QPs of the affected sequence with the flag so the curve is uniform
   — budget accordingly on 4K. Observed head-7 cost is strongly QP-dependent:
   RollerCoaster2 ran 18.0 / 14.8 / 9.7 / 6.1 h for QP22/27/32/37 (~2.0 days for
-  the four), while Campfire is slower still (QP22 alone took 82,576 s ≈ 22.9 h).
+  the four); Campfire is slower at 22.9 / 20.4 / 13.4 / 10.5 h (~2.8 days).
 - **Debugging tip.** The `printf("getGeoBlendCand( mergeIdx=%d ) failed")` +
   `exit(0)` diagnostic (`InterPrediction.cpp:11781`) sits *after* the `CHECK`, so
   it never prints. To see the offending `mergeIdx`, temporarily move the `CHECK`
