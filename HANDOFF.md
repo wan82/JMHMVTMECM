@@ -459,12 +459,79 @@ caveat still applies), it is not a harmless "back to normal ECM".
   above re-runs **all four QPs**, not just the failing one — use `run_pilot.py`
   directly with `--qp` if you want a single point. And always pass `TAG=`, or the
   re-run overwrites `runs/fastTop7_<SEQ>/` in place.
-- `GeoBlendIntra` is one of ~100 ECM tools (<~0.5% bitrate — a rule-of-thumb
-  figure, not measured here), so for the head-frames diagnostic the effect is
-  negligible; for a rigorous curve, re-run *all* QPs of that sequence with the
-  flag. Cost is strongly QP-dependent: RollerCoaster2 head-7 took 18.0 / 14.8 /
+- `GeoBlendIntra` is one of ~100 ECM tools, and on Campfire its **measured**
+  effect is small: across all 22 pictures present in both the tool-on and
+  tool-off runs, the two differ by at most **0.82 % in bits and 0.019 dB in
+  Y-PSNR** (worst case QP22 POC 1, TId 5 — the effect grows with temporal
+  depth; on TId 1–2 it stays under 0.39 % / 0.005 dB). I-slices are
+  bit-identical, as expected for an inter tool, and at **QP37 the two
+  bitstreams are byte-for-byte identical** — the tool was never picked. So for
+  the head-frames diagnostic the effect is negligible; for a rigorous curve,
+  re-run *all* QPs of that sequence with the flag. Cost is strongly QP-dependent: RollerCoaster2 head-7 took 18.0 / 14.8 /
   9.7 / 6.1 h for QP22/27/32/37 (~2.0 days total), Campfire 22.9 / 20.4 / 13.4 /
   10.5 h (~2.8 days) — so budget ~2–3 days per 4K sequence.
+
+### 6.11a Salvaging a crashed QP point: `scripts/estimate_missing_frames.py`
+
+A tool-off re-run gives you the whole curve, but tool-off. This script splices it
+with the partial tool-on run so the curve stays usable: **pictures the tool-on
+run actually coded are kept as measured**, and only the ones it never reached are
+filled from the tool-off donor, corrected by the tool's effect on that same
+picture, interpolated in QP from the QPs that did complete.
+
+```bash
+python scripts/estimate_missing_frames.py \
+  --on-run  runs/fastTop7_Campfire_ctc \
+  --off-run runs/fastTop7_Campfire_nogbi \
+  --label   Campfire_RA_head7_recon      # --dry-run to print without writing
+```
+
+Writes `results/<label>_{frames,summary,validation}.csv`; each picture row is
+tagged `measured`/`estimated`, each summary row carries `is_reconstructed`.
+
+**It validates itself — and tells you what the validation misses.** The pictures
+a crashed run *did* code (POC 0/32/16/8 at QP27/QP32) are held out, predicted
+from the anchors alone, and compared with ground truth. For Campfire the worst
+held-out error is **0.353 % bitrate / 0.0049 dB Y-PSNR**. Do not quote that
+figure as the accuracy of the reconstruction; three things weaken it, and the
+script prints all three:
+
+- **n = 4, not 8.** Half the held-out pictures are I-slices, bit-identical
+  between the runs, and prove nothing.
+- **The QP37 anchor is uninformative** — the two runs are byte-identical there,
+  so the "two-anchor interpolation" is really a scaled single-anchor
+  extrapolation from QP22.
+- **The held-out pictures are the wrong pictures.** A crash leaves the shallow
+  temporal layers (TId 1–2) and takes out the deep ones (TId 3–5) — and TId 3–5
+  is precisely what gets filled *and* where the tool's effect is largest. At the
+  anchors the tool moves TId 3–5 by up to **0.82 % / 0.019 dB**. **That is the
+  number to quote** as the uncertainty on a reconstructed picture.
+
+Also worth knowing: the correction does not beat simply using the donor value
+uncorrected (0.385 % / 0.0043 dB), i.e. the tool's effect here is under the
+encoder's own RD jitter. A filled-in value is honestly "the tool-off encode of
+that picture", not a precise tool-on estimate. The script says so whenever that
+holds.
+
+Even at 0.82 % / 0.019 dB the splice stays inside the ±1 % / ±0.05 dB tolerance
+of §2 — but that is a *margin*, not a comfort: it means one more crashed
+temporal layer, or a sequence where the tool matters more, could push a
+reconstruction out of tolerance. Re-run the validation output every time; do not
+assume Campfire's numbers transfer.
+
+**Rules for using the output.**
+
+- Estimated points are **never** merged into `results/raw_metrics.csv`. The
+  script will not do it and neither should you.
+- Any BD-rate, figure, or table built on them must be labelled *reconstructed*,
+  stating which pictures were filled and the validated error above.
+- `enc_time_sec` is left blank for reconstructed QPs on purpose: a spliced curve
+  mixes two tool configurations, so its wall-clock is not a valid complexity
+  number (§6.3, §7.3).
+- This is a stopgap for the head-frames diagnostic. If Campfire has to appear in
+  a **reported** CTC curve, re-run all four QPs uniformly with
+  `--GeoBlendIntra=0` and report the curve as tool-off, rather than publishing a
+  spliced one.
 
 ### 6.12 As of the latest release (ECM-20.0), upgrading does NOT fix §6.11
 

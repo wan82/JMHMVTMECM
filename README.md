@@ -241,6 +241,65 @@ Notes for whoever hits this:
   on it, `run_pilot.py` (which only inspects the return code) would count the
   failed encode as a success; check the log contents, not just the exit status.
 
+### Reconstructing a crashed QP point (`scripts/estimate_missing_frames.py`)
+
+When the assertion above kills a QP part-way, the tool-off re-run gives you that
+whole curve — but tool-off. `estimate_missing_frames.py` splices the two so a
+crashed curve stays usable: **every picture the tool-on run actually produced is
+kept as measured**, and only the pictures it never reached are filled in from the
+tool-off run, corrected by the tool's effect measured on that *same picture* at
+the QPs that did complete (linear in QP between them).
+
+```bash
+python scripts/estimate_missing_frames.py \
+  --on-run  runs/fastTop7_Campfire_ctc \
+  --off-run runs/fastTop7_Campfire_nogbi \
+  --label   Campfire_RA_head7_recon        # add --dry-run to just print
+```
+
+It writes `results/<label>_{frames,summary,validation}.csv`. Every per-picture
+row is tagged `measured` or `estimated`; every summary row carries
+`is_reconstructed` and `frames_estimated`.
+
+**It validates itself before reporting anything**, and it is candid about what
+the validation does *not* cover. The pictures a crashed run *did* code are held
+out, predicted from the anchor QPs alone, and compared with ground truth. For
+Campfire (anchors QP22/QP37, filling POC 4/2/1 at QP27 and QP32):
+
+| | worst \|bitrate error\| | worst \|Y-PSNR error\| |
+|---|---|---|
+| corrected (this method) | 0.353 % | 0.0049 dB |
+| donor used uncorrected | 0.385 % | 0.0043 dB |
+
+Three caveats travel with those numbers, all printed by the script:
+
+- **The held-out set is n = 4, not 8.** Half the held-out pictures are I-slices,
+  which are bit-identical between the two runs (`GeoBlendIntra` is an inter
+  tool) and therefore prove nothing.
+- **The QP37 anchor carries zero information** — tool-on and tool-off are
+  byte-identical there, so the "two-anchor interpolation" is arithmetically a
+  scaled *single*-anchor extrapolation from QP22.
+- **The held-out pictures are not the pictures being filled.** A crash stops the
+  run partway, so what survives is the shallow temporal layers (TId 1–2) while
+  what gets filled is the deep ones (TId 3–5) — exactly where the tool's effect
+  is largest. Measured at the anchors on TId 3–5, `GeoBlendIntra` moves up to
+  **0.82 % of bits and 0.019 dB of Y-PSNR**. That, not the 0.35 % / 0.005 dB
+  above, is the honest uncertainty on a reconstructed picture.
+
+Even at 0.82 % / 0.019 dB the splice sits inside the ±1 % / ±0.05 dB baseline
+tolerance of §2 in HANDOFF. But note the correction term is **not** what buys
+that: it does not beat using the donor uncorrected, so a filled-in value is
+honestly just "the tool-off encode of that picture". The script says so itself
+whenever the corrected model fails to beat the raw donor.
+
+> **Estimated points are never merged into `results/raw_metrics.csv`.** They
+> exist to keep a curve usable, not to stand in for measurement. Any BD-rate,
+> figure, or table built on them must be labelled reconstructed, and the paper
+> should state which pictures were filled and the validated error above.
+> Encoding time is deliberately left blank for reconstructed QPs — a spliced
+> curve mixes two tool configurations, so its wall-clock is not a valid
+> complexity number (see §6.3 / §7.3 in HANDOFF).
+
 ### As of the latest release (ECM-20.0), upgrading does **not** fix this
 
 Checked against the current latest ECM version (**20.0**) — the defect is still

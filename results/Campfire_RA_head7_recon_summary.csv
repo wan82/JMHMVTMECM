@@ -1,0 +1,5 @@
+label,encoder,qp,frames,frames_estimated,is_reconstructed,bitrate_kbps,psnr_y_db,psnr_u_db,psnr_v_db,enc_time_sec
+Campfire_RA_head7_recon,ecm,22,7,0,0,92237.28,41.359,43.5552,43.4416,
+Campfire_RA_head7_recon,ecm,27,7,3,1,32869.51,38.7688,39.9988,42.1195,
+Campfire_RA_head7_recon,ecm,32,7,3,1,15285.68,37.4015,37.4788,40.8113,
+Campfire_RA_head7_recon,ecm,37,7,0,0,7845.09,35.8403,35.0301,38.9885,
