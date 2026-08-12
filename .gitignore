@@ -42,8 +42,20 @@ xcuserdata/
 *.xcuserdatad/
 project.xcworkspace/xcuserdata/
 
-# Encoded outputs and intermediate files (project-level)
-runs/
+# Encoded outputs and intermediate files (project-level).
+# runs/ is excluded wholesale EXCEPT the head-frames diagnostic runs: their
+# encoder logs and jobs.csv are small text (~216 KB total) and are the evidence
+# behind the ECM findings in README / HANDOFF 6.10-6.11a, and the input that
+# scripts/estimate_missing_frames.py needs to reproduce results/Campfire_*_recon_*.csv.
+# Bitstreams (11 MB) stay out via the *.bin rule below; so do tmp_configs/,
+# the older *_pilot runs, and stray *.out files.
+runs/*
+!runs/fastTop7_*/
+runs/fastTop7_*/*
+!runs/fastTop7_*/logs/
+!runs/fastTop7_*/jobs.csv
+runs/fastTop7_*/logs/*
+!runs/fastTop7_*/logs/*.log
 sequences/*.yuv
 sequences/*.y4m
 # Subsampled AI YUVs produced by scripts/extract_ai_subsample.py
