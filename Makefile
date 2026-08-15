@@ -119,11 +119,11 @@ ifeq ($(strip $(SEQ)),)
 	@echo "fastTestTop7: launching VTM+ECM top-7 for 5 sequences concurrently..."
 	@mkdir -p runs
 	@for s in $(FASTTOP7_SEQS); do \
-	  echo "  -> $$s  (log: runs/fastTop7_$$s.out)"; \
+	  echo "  -> $$s  (log: runs/fastTop7_$${s}$(TAG).out)"; \
 	  $(PYTHON) scripts/run_pilot.py --coded-frames 7 --seq $$s \
-	    --encoders $(FT7_ENC) --jobs 1 --run-name fastTop7_$$s$(TAG) \
+	    --encoders $(FT7_ENC) --jobs 1 --run-name fastTop7_$${s}$(TAG) \
 	    $(if $(EXTRA),--extra-ecm-args='$(EXTRA)') \
-	    > runs/fastTop7_$$s$(TAG).out 2>&1 & \
+	    > runs/fastTop7_$${s}$(TAG).out 2>&1 & \
 	done; \
 	wait; \
 	echo "fastTestTop7: all 5 sequences finished."
