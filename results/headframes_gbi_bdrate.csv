@@ -1,0 +1,11 @@
+sequence,weighting,qps,bdrate_y_pct,time_saving_pct,psnr_overlap_pct,anchor_time_sec,test_time_sec,note
+Campfire,plain,22/27/32/37,-0.0542,,99.93,,261495.1,anchor reconstructed (6 est. pictures)
+Campfire,tid,22/27/32/37,-0.1681,,99.79,,261495.1,anchor reconstructed (6 est. pictures)
+RollerCoaster2,plain,22/27/32/37,0.1174,7.82,99.99,174887.0,161211.6,
+RollerCoaster2,tid,22/27/32/37,0.1924,7.82,99.97,174887.0,161211.6,
+ParkScene,plain,22/27/32/37,0.0351,0.91,99.94,79931.8,79204.4,
+ParkScene,tid,22/27/32/37,0.0685,0.91,99.91,79931.8,79204.4,
+BQMall,plain,22/27/32/37,-0.0479,1.231,99.92,12238.0,12087.3,
+BQMall,tid,22/27/32/37,-0.1502,1.231,99.84,12238.0,12087.3,
+BQSquare,plain,22/27/32/37,-0.181,0.438,99.71,2865.7,2853.1,
+BQSquare,tid,22/27/32/37,-0.501,0.438,99.74,2865.7,2853.1,

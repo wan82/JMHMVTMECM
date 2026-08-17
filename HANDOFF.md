@@ -292,6 +292,12 @@ If you hit errors like `error: use of undeclared identifier '_mm_xxx'`
 When reporting, **use only time ratios** (relative to JM or HM), never
 absolute seconds. Absolute numbers are tightly coupled to the machine.
 
+Ratios are only safe when both sides ran under the **same machine contention**.
+A run launched as part of a concurrent batch is slower than the identical run
+launched solo, by several percent — enough to invent an effect that isn't there.
+See §6.11b for a case where this produced a convincing but entirely fake
+"7.8 % speed-up". Record how many jobs were running alongside each measurement.
+
 ### 6.4 Paths containing spaces
 
 Place the project under a path without spaces. JM's `-p InputFile=…` is
@@ -459,15 +465,12 @@ caveat still applies), it is not a harmless "back to normal ECM".
   above re-runs **all four QPs**, not just the failing one — use `run_pilot.py`
   directly with `--qp` if you want a single point. And always pass `TAG=`, or the
   re-run overwrites `runs/fastTop7_<SEQ>/` in place.
-- `GeoBlendIntra` is one of ~100 ECM tools, and on Campfire its **measured**
-  effect is small: across all 22 pictures present in both the tool-on and
-  tool-off runs, the two differ by at most **0.82 % in bits and 0.019 dB in
-  Y-PSNR** (worst case QP22 POC 1, TId 5 — the effect grows with temporal
-  depth; on TId 1–2 it stays under 0.39 % / 0.005 dB). I-slices are
-  bit-identical, as expected for an inter tool, and at **QP37 the two
-  bitstreams are byte-for-byte identical** — the tool was never picked. So for
-  the head-frames diagnostic the effect is negligible; for a rigorous curve,
-  re-run *all* QPs of that sequence with the flag. Cost is strongly QP-dependent: RollerCoaster2 head-7 took 18.0 / 14.8 /
+- **The consistency cost of `--GeoBlendIntra=0` is below what this setup can
+  measure** — across all five head-frames sequences, BD-rate moves by less than
+  ±0.2 % and encoding time by less than the ±5 % timing noise floor. Full
+  analysis and the evidence in **§6.11b**. In short: use the flag without
+  agonising over it, but for a rigorous curve still re-run *all* QPs of the
+  affected sequence so the curve is internally uniform. Cost is strongly QP-dependent: RollerCoaster2 head-7 took 18.0 / 14.8 /
   9.7 / 6.1 h for QP22/27/32/37 (~2.0 days total), Campfire 22.9 / 20.4 / 13.4 /
   10.5 h (~2.8 days) — so budget ~2–3 days per 4K sequence.
 
@@ -532,6 +535,91 @@ assume Campfire's numbers transfer.
   a **reported** CTC curve, re-run all four QPs uniformly with
   `--GeoBlendIntra=0` and report the curve as tool-off, rather than publishing a
   spliced one.
+
+### 6.11b How big is the GeoBlendIntra effect? Below the noise — and here is the proof
+
+Run it yourself:
+
+```bash
+python scripts/analyze_headframes.py \
+  --sequences Campfire,RollerCoaster2,ParkScene,BQMall,BQSquare \
+  --anchor-recon Campfire=results/Campfire_RA_head7_recon_frames.csv
+```
+
+`scripts/analyze_headframes.py` pulls bits / Y-PSNR / ET out of the head-frames
+logs, builds one RD point per (sequence, QP), and compares the `_nogbi` runs
+against the `_ctc` anchors. The BD-rate itself lives in `scripts/bd_metrics.py`
+(PCHIP integral, the JCTVC-L0330 formulation) and reproduces an independent
+reference implementation bit-for-bit, so the arithmetic is not in question.
+
+Raw output:
+
+| sequence | BD-rate Y % | time saving % |
+|---|---|---|
+| Campfire | −0.05 | n/a (reconstructed anchor) |
+| RollerCoaster2 | +0.12 | 7.82 |
+| ParkScene | +0.04 | 0.91 |
+| BQMall | −0.05 | 1.23 |
+| BQSquare | −0.18 | 0.44 |
+
+**Do not report these as the tool's effect.** They are dominated by measurement
+noise, and the data contains its own proof of that.
+
+**The built-in control.** At **QP37 the `_ctc` and `_nogbi` bitstreams are
+bit-identical in all five sequences** — same bits, same PSNR, every picture.
+GeoBlendIntra was simply never selected at that operating point, so the two runs
+performed identical work. Their encoding times therefore *should* match. They
+do not:
+
+| sequence | QP37 apparent time saving |
+|---|---|
+| ParkScene | +0.03 % |
+| BQSquare | +0.26 % |
+| BQMall | +0.34 % |
+| **RollerCoaster2** | **+4.96 %** |
+
+Identical work, ~5 % apparent difference. **That is the timing noise floor of
+this machine, and it swallows every time-saving figure in the table above.** The
+script computes and prints this floor automatically, and names the sequences
+whose saving falls below it.
+
+**Where RollerCoaster2's 7.82 % came from: CPU contention, not the tool.** The
+`_ctc` anchors were launched as a concurrent batch (QP22 overlapped eleven other
+encodes), while the `_nogbi` runs had the machine to themselves. The per-QP
+"saving" tracks the overlap count almost exactly — 11.26 % (11 concurrent jobs),
+7.35 % (3), 3.91 % (1), 4.96 % (1). ParkScene / BQMall / BQSquare had matched
+concurrency across both runs and sit at 0.3–2.4 %.
+
+**BD-rate is equally unresolved.** The QP37 points are exact ties in both rate
+and quality, so they contribute nothing to the integral — each curve effectively
+rests on three points with one endpoint pinned. And the remaining per-QP bitrate
+deltas alternate in sign within a sequence (BQSquare: −0.26 / −0.37 / +0.13 /
+0.00 %), which is the signature of RD-decision reshuffling rather than a
+systematic coding gain.
+
+**The defensible statement:**
+
+> Disabling `GeoBlendIntra` changes coding efficiency by less than ±0.2 % BD-rate
+> and changes encoding time by less than the ±5 % timing noise floor of the test
+> machine, on all five head-frames sequences. Its true cost is not resolvable
+> from this data.
+
+That is enough to justify the workaround in §6.11. It is **not** enough to
+publish a number like "saves 2.6 % of encoding time" — that figure is an
+artefact of averaging over a contended anchor.
+
+**If a real timing number is ever needed**, re-run with `parallel_jobs: 1`, no
+other load on the machine, and the two configurations interleaved rather than
+run weeks apart. Expect the true cost to be around 0.2–0.3 % — which is why this
+is probably not worth three days of machine time.
+
+**General lesson, applies well beyond this tool.** Encoding times are only
+comparable between runs that had the same machine contention. The pilot's own
+figures (§1, §7.3) came from a matched batch, so they are fine; but any future
+comparison that mixes a batch run with a solo run is measuring the scheduler.
+Record concurrency alongside timing, and prefer a bit-identical control point
+whenever the experiment offers one — it costs nothing and it is the only thing
+that told us the 7.82 % was fake.
 
 ### 6.12 As of the latest release (ECM-20.0), upgrading does NOT fix §6.11
 
